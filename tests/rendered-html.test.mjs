@@ -87,3 +87,15 @@ test("planta aceita traços contínuos e componentes de porta e janela", async (
   assert.match(app, /A 48 48/);
   assert.match(app, /el\.type === "window"/);
 });
+
+test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () => {
+  const [app, models] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/types/models.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(models, /mediaType\?: "image" \| "video"/);
+  assert.match(app, /video\/mp4,video\/quicktime,video\/webm/);
+  assert.match(app, /Vídeos do ambiente/);
+  assert.match(app, /mediaType === "video"/);
+  assert.match(app, /<video/);
+});

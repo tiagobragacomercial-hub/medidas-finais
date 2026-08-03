@@ -34,6 +34,9 @@
 - Quatro vídeos de referência de planta analisados focando exclusivamente o gesto. Planta web alterada para múltiplos traços contínuos à mão livre por toque/mouse/caneta, com retificação opcional, preservação de plantas antigas e persistência no Supabase pela migração `20260803170000_floor_plan_freehand_strokes.sql`.
 - Componentes de planta: porta pronta com folha e arco de abertura; janela pronta com representação própria. Ambos podem ser inseridos, arrastados, girados e excluídos sem usar imagens fixas dos vídeos.
 - Verificação após desenho livre: lint, tipos web/móvel, 8 testes unitários, 3 de integração, build e 6 E2E aprovados.
+- Vídeo por ambiente: importação local de MP4, MOV e WebM adicionada ao editor web, com dimensões, duração, tipo MIME, reprodução com controles, fila de upload e preservação do arquivo local. Vídeos ficam separados das fotografias editáveis e nunca são fonte de medidas.
+- Portal/publicação recebe os metadados do vídeo e o PDF registra a lista de vídeos anexados sem tentar transformar o vídeo em imagem. Supabase atualizado pela migração `20260803183000_environment_videos.sql`.
+- Verificação após vídeo: lint, tipos web/móvel, 9 testes unitários, 4 de integração, build e 6 E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

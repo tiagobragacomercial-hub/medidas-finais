@@ -126,6 +126,35 @@ test("sync só confirma após aceite e preserva a cópia local", async () => {
   assert.equal((await db.syncOperations.toArray())[0]?.status, "synced");
   await db.delete();
 });
+test("vídeo do ambiente permanece local e na fila após reabrir", async () => {
+  await db.delete();
+  await db.open();
+  const id = uid(), timestamp = now();
+  await db.transaction("rw", db.photos, db.syncOperations, async () => {
+    await db.photos.put({
+      id,
+      environmentId: "ambiente-video",
+      name: "vistoria.mp4",
+      blob: new Blob(["video-local"], { type: "video/mp4" }),
+      width: 1080,
+      height: 1920,
+      mediaType: "video",
+      mimeType: "video/mp4",
+      durationSeconds: 42,
+      syncState: "local",
+      createdAt: timestamp,
+    });
+    await queue("photo", id, "upload");
+  });
+  db.close();
+  await db.open();
+  const video = await db.photos.get(id);
+  assert.equal(video?.mediaType, "video");
+  assert.equal(video?.durationSeconds, 42);
+  assert.equal(video?.blob.type, "video/mp4");
+  assert.equal((await db.syncOperations.where("entityId").equals(id).first())?.status, "pending");
+  await db.delete();
+});
 test.after(async () => {
   db.close();
 });

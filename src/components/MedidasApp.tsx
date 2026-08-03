@@ -741,8 +741,14 @@ function Editor({
   selectEnvironment: (environmentId: string) => void;
   notify: (s: string) => void;
 }) {
-  const environmentPhotos = photos.filter(
+  const environmentMedia = photos.filter(
       (item) => item.environmentId === environmentId,
+    ),
+    environmentPhotos = environmentMedia.filter(
+      (item) => !item.mediaType || item.mediaType === "image",
+    ),
+    environmentVideos = environmentMedia.filter(
+      (item) => item.mediaType === "video",
     ),
     [photoId, setPhotoId] = useState(""),
     photo = environmentPhotos.find((p) => p.id === photoId),
@@ -776,26 +782,56 @@ function Editor({
       notify("Selecione ou crie um ambiente antes de importar a foto");
       return;
     }
-    const im = new Image(),
-      url = URL.createObjectURL(f);
-    im.onload = async () => {
+    const url = URL.createObjectURL(f);
+    const saveMedia = async (
+      width: number,
+      height: number,
+      mediaType: "image" | "video",
+      durationSeconds?: number,
+    ) => {
       const id = uid();
       await db.photos.put({
         id,
         environmentId: environment.id,
         name: f.name,
         blob: f,
-        width: im.width,
-        height: im.height,
+        width,
+        height,
+        mediaType,
+        mimeType: f.type,
+        durationSeconds,
         syncState: "local",
         createdAt: now(),
       });
       await queue("photo", id, "upload");
-      setPhotoId(id);
+      if (mediaType === "image") setPhotoId(id);
       URL.revokeObjectURL(url);
-      notify("Foto original salva neste dispositivo");
+      e.target.value = "";
+      notify(
+        mediaType === "video"
+          ? "Vídeo original salvo neste dispositivo"
+          : "Foto original salva neste dispositivo",
+      );
     };
-    im.src = url;
+    if (f.type.startsWith("video/")) {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () =>
+        void saveMedia(video.videoWidth, video.videoHeight, "video", video.duration);
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        notify("Formato de vídeo não suportado neste navegador");
+      };
+      video.src = url;
+    } else {
+      const image = new Image();
+      image.onload = () => void saveMedia(image.width, image.height, "image");
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        notify("Formato de imagem não suportado neste navegador");
+      };
+      image.src = url;
+    }
   }
   async function draw(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest("[data-annotation-control]")) return;
@@ -962,10 +998,16 @@ function Editor({
     });
     await queue("annotation", a.id, "update");
   }
-  const url = useMemo(
-    () => (photo ? URL.createObjectURL(photo.blob) : ""),
-    [photo],
-  );
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!photo) {
+      setUrl("");
+      return;
+    }
+    const nextUrl = URL.createObjectURL(photo.blob);
+    setUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [photo]);
   return (
     <>
       <Head
@@ -978,7 +1020,7 @@ function Editor({
               ref={file}
               className="sr-only"
               type="file"
-              accept="image/jpeg,image/png,image/heic"
+              accept="image/jpeg,image/png,image/heic,video/mp4,video/quicktime,video/webm"
               onChange={upload}
             />
             <button
@@ -986,7 +1028,7 @@ function Editor({
               onClick={() => file.current?.click()}
             >
               <ImagePlus size={17} />
-              Importar foto
+              Importar foto ou vídeo
             </button>
           </>
         }
@@ -1024,6 +1066,19 @@ function Editor({
           </label>
         </div>
       </section>
+      {environmentVideos.length > 0 && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="cardhead">
+            <h2>Vídeos do ambiente</h2>
+            <span className="pill">{environmentVideos.length}</span>
+          </div>
+          <div className="grid">
+            {environmentVideos.map((video) => (
+              <EnvironmentVideo key={video.id} media={video} />
+            ))}
+          </div>
+        </section>
+      )}
       <div className="workspace">
         <div className="tools">
           {[
@@ -1189,6 +1244,28 @@ function Editor({
     </>
   );
 }
+
+function EnvironmentVideo({ media }: { media: Photo }) {
+  const url = useMemo(() => URL.createObjectURL(media.blob), [media.blob]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return (
+    <article className="card" style={{ gridColumn: "span 6" }}>
+      <video
+        controls
+        preload="metadata"
+        src={url}
+        style={{ width: "100%", maxHeight: 320, borderRadius: 12, background: "#111" }}
+      />
+      <strong>{media.name}</strong>
+      <small style={{ display: "block" }}>
+        {media.durationSeconds
+          ? `${Math.round(media.durationSeconds)} segundos · salvo neste dispositivo`
+          : "Salvo neste dispositivo"}
+      </small>
+    </article>
+  );
+}
+
 function Measure({
   a,
   selected,
@@ -2194,6 +2271,9 @@ function Portal({
             name: item.name,
             width: item.width,
             height: item.height,
+            mediaType: item.mediaType || "image",
+            mimeType: item.mimeType || item.blob.type,
+            durationSeconds: item.durationSeconds,
             createdAt: item.createdAt,
           })),
           annotations: annotations.filter((item) => photoIds.has(item.photoId)),
@@ -2402,10 +2482,16 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
         .where("environmentId")
         .equals(environment.id)
         .first(),
-      environmentPhotos = await db.photos
+      environmentMedia = await db.photos
         .where("environmentId")
         .equals(environment.id)
-        .toArray();
+        .toArray(),
+      environmentPhotos = environmentMedia.filter(
+        (item) => !item.mediaType || item.mediaType === "image",
+      ),
+      environmentVideos = environmentMedia.filter(
+        (item) => item.mediaType === "video",
+      );
     d.addPage();
     header(
       environment.name.toUpperCase(),
@@ -2483,6 +2569,27 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
       });
     }
     footer();
+
+    if (environmentVideos.length) {
+      d.addPage();
+      header(environment.name.toUpperCase(), "Vídeos anexados ao ambiente");
+      d.setTextColor(23, 37, 52);
+      d.setFontSize(11);
+      environmentVideos.forEach((video, index) => {
+        const duration = video.durationSeconds
+          ? ` · ${Math.round(video.durationSeconds)} segundos`
+          : "";
+        d.text(`${index + 1}. ${video.name}${duration}`, 24, 45 + index * 10);
+      });
+      d.setFontSize(8);
+      d.setTextColor(96, 115, 134);
+      d.text(
+        "Os vídeos permanecem anexados digitalmente; o PDF registra sua identificação.",
+        24,
+        50 + environmentVideos.length * 10,
+      );
+      footer();
+    }
 
     for (const photo of environmentPhotos) {
       d.addPage();

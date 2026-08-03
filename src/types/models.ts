@@ -37,6 +37,9 @@ export interface Photo {
   blob: Blob;
   width: number;
   height: number;
+  mediaType?: "image" | "video";
+  mimeType?: string;
+  durationSeconds?: number;
   syncState: SyncState;
   createdAt: string;
 }
