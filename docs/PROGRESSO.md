@@ -42,6 +42,8 @@
 - Reinício do zero solicitado em 03/08/2026: dados operacionais removidos do Supabase pela migração transacional `20260803193000_reset_operational_data.sql`; organização e conta proprietária preservadas e verificadas por `20260803193500_verify_operational_reset.sql`.
 - Storage conferido após a limpeza: `project-media` e `publication-files` possuem zero objetos. Seed demonstrativo removido. IndexedDB web v5 e SQLite móvel v2 executam limpeza local única para impedir reaparecimento offline.
 - Primeiro uso simplificado: botão principal orienta primeiro cadastro de cliente e depois projeto; criação de ambiente/projeto permanece desabilitada enquanto faltar a dependência necessária.
+- Criação de medida: após o primeiro ponto, foto e planta exibem linha provisória e os dois extremos acompanhando o ponteiro. O valor numérico é solicitado somente depois do segundo ponto e continua exclusivamente manual.
+- Verificação após prévia: lint, tipos web/móvel, 11 testes unitários, 4 de integração, build e 6 E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

@@ -111,3 +111,16 @@ test("traços não bloqueiam o início de outra medida", async () => {
   assert.match(app, /selectedMeasurement && mode !== "measure"/);
   assert.match(app, /mode === "wall" && strokes\.flatMap/);
 });
+
+test("medida mostra prévia entre os pontos e solicita o número por último", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /Prévia da medida em criação/);
+  assert.match(app, /measurementPreview/);
+  assert.match(app, /Agora informe o número real da medida/);
+  const promptPosition = app.indexOf("Agora informe o número real da medida");
+  const measurementInsertPosition = app.indexOf("setMeasurements((items)", promptPosition);
+  assert.ok(promptPosition >= 0 && measurementInsertPosition > promptPosition);
+});

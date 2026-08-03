@@ -783,6 +783,7 @@ function Editor({
     [draftPoints, setDraftPoints] = useState<Array<{ x: number; y: number }>>(
       [],
     ),
+    [draftPointer, setDraftPointer] = useState<{ x: number; y: number } | null>(null),
     [selected, setSelected] = useState(""),
     [photoDrag, setPhotoDrag] = useState<{
       annotationId: string;
@@ -929,6 +930,10 @@ function Editor({
     notify(`${config.label} salva e protegida`);
   }
   async function movePhotoAnnotation(e: React.PointerEvent<HTMLDivElement>) {
+    if (draftPoints.length && canvas.current && isAnnotationTool(tool))
+      setDraftPointer(
+        normalizePointer(e.clientX, e.clientY, canvas.current.getBoundingClientRect()),
+      );
     if (!photoDrag || !canvas.current) return;
     const point = normalizePointer(e.clientX, e.clientY, canvas.current.getBoundingClientRect());
     const annotation = await db.annotations.get(photoDrag.annotationId);
@@ -1112,7 +1117,11 @@ function Editor({
             <button
               key={id}
               className={`tool ${tool === id ? "active" : ""}`}
-              onClick={() => setTool(id)}
+              onClick={() => {
+                setTool(id);
+                setDraftPoints([]);
+                setDraftPointer(null);
+              }}
             >
               {label}
             </button>
@@ -1133,6 +1142,26 @@ function Editor({
             {photo ? (
               <>
                 <img src={url} alt={photo.name} />
+                {draftPoints[0] && draftPointer && (
+                  <svg
+                    viewBox="0 0 1000 1000"
+                    aria-label="Prévia da medida em criação"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 6 }}
+                    preserveAspectRatio="none"
+                  >
+                    <line
+                      x1={draftPoints[0].x * 1000}
+                      y1={draftPoints[0].y * 1000}
+                      x2={draftPointer.x * 1000}
+                      y2={draftPointer.y * 1000}
+                      stroke="#f59e0b"
+                      strokeWidth="5"
+                      strokeDasharray="14 9"
+                    />
+                    <circle cx={draftPoints[0].x * 1000} cy={draftPoints[0].y * 1000} r="11" fill="#0876db" />
+                    <circle cx={draftPointer.x * 1000} cy={draftPointer.y * 1000} r="11" fill="#f59e0b" />
+                  </svg>
+                )}
                 {anns
                   .filter((a) => a.state !== "hidden")
                   .sort((a, b) => a.layer - b.layer)
@@ -1469,6 +1498,10 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       x: number;
       y: number;
     } | null>(null),
+    [measurementPreview, setMeasurementPreview] = useState<{
+      x: number;
+      y: number;
+    } | null>(null),
     [confirmed, setConfirmed] = useState(false),
     [hydratedEnvironment, setHydratedEnvironment] = useState(""),
     [selected, setSelected] = useState<
@@ -1573,8 +1606,22 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       e.currentTarget.setPointerCapture(e.pointerId);
     }
     else if (mode === "measure") {
-      if (!measurementStart) setMeasurementStart(p);
+      if (!measurementStart) {
+        setMeasurementStart(p);
+        setMeasurementPreview(p);
+      }
       else {
+        const informed = prompt("Agora informe o número real da medida:", "");
+        if (informed === null) {
+          setMeasurementStart(null);
+          setMeasurementPreview(null);
+          return;
+        }
+        const parsed = measurementValueSchema.safeParse(informed.trim());
+        if (!parsed.success) {
+          alert("Informe somente o número da medida. Nenhum valor foi salvo.");
+          return;
+        }
         const id = uid();
         setMeasurements((items) => [
           ...items,
@@ -1582,12 +1629,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             id,
             start: measurementStart,
             end: p,
-            value: "",
+            value: parsed.data,
             unit: floorPlanProject?.unit || "mm",
           },
         ]);
         setSelected({ kind: "measurement", id });
         setMeasurementStart(null);
+        setMeasurementPreview(null);
       }
     } else if (mode === "text") {
       const value = prompt("Digite o texto que ficará na planta:", "")?.trim();
@@ -1607,6 +1655,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   }
   function moveSelected(e: React.PointerEvent<SVGSVGElement>) {
     const p = pointerPosition(e);
+    if (measurementStart && mode === "measure" && !confirmed)
+      setMeasurementPreview(p);
     if (drawingStroke && mode === "wall" && !confirmed) {
       setStrokes((items) => {
         const next = [...items], current = [...(next[next.length - 1] || [])], last = current[current.length - 1];
@@ -1833,14 +1883,37 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 </g>
               ))}
               {measurementStart && (
-                <circle
-                  cx={measurementStart.x * 1000}
-                  cy={measurementStart.y * 600}
-                  r="12"
-                  fill="#f59e0b"
-                  stroke="#fff"
-                  strokeWidth="4"
-                />
+                <g pointerEvents="none">
+                  {measurementPreview && (
+                    <line
+                      x1={measurementStart.x * 1000}
+                      y1={measurementStart.y * 600}
+                      x2={measurementPreview.x * 1000}
+                      y2={measurementPreview.y * 600}
+                      stroke="#f59e0b"
+                      strokeWidth="5"
+                      strokeDasharray="14 9"
+                    />
+                  )}
+                  <circle
+                    cx={measurementStart.x * 1000}
+                    cy={measurementStart.y * 600}
+                    r="12"
+                    fill="#0876db"
+                    stroke="#fff"
+                    strokeWidth="4"
+                  />
+                  {measurementPreview && (
+                    <circle
+                      cx={measurementPreview.x * 1000}
+                      cy={measurementPreview.y * 600}
+                      r="12"
+                      fill="#f59e0b"
+                      stroke="#fff"
+                      strokeWidth="4"
+                    />
+                  )}
+                </g>
               )}
               {!confirmed && mode === "wall" && strokes.flatMap((stroke, strokeIndex) => {
                 const indexes = stroke.length > 1 ? [0, stroke.length - 1] : [];
@@ -1922,6 +1995,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   onClick={() => {
                     setMode(x);
                     setMeasurementStart(null);
+                    setMeasurementPreview(null);
                   }}
                 >
                   {x === "wall" ? "mão livre" : x === "measure" ? "medida" : x === "text" ? "texto" : x}
@@ -2088,6 +2162,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               setMeasurements([]);
               setTexts([]);
               setMeasurementStart(null);
+              setMeasurementPreview(null);
               setConfirmed(false);
             }}
           >
