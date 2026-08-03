@@ -80,6 +80,11 @@ const migrations = [
     CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status, created_at);
   `,
+  `
+    DELETE FROM sync_queue;
+    DELETE FROM projects;
+    DELETE FROM clients;
+  `,
 ];
 
 export async function initializeDatabase() {

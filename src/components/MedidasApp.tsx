@@ -231,6 +231,8 @@ export function MedidasApp() {
               photos={photos}
               pending={pending}
               go={setSection}
+              newClient={() => setModal("client")}
+              newProject={() => setModal("project")}
             />
           )}{" "}
           {section === "clients" && (
@@ -382,6 +384,8 @@ function Dashboard({
   photos,
   pending,
   go,
+  newClient,
+  newProject,
 }: {
   clients: Client[];
   projects: Project[];
@@ -389,6 +393,8 @@ function Dashboard({
   photos: Photo[];
   pending: number;
   go: (s: Section) => void;
+  newClient: () => void;
+  newProject: () => void;
 }) {
   return (
     <>
@@ -397,9 +403,22 @@ function Dashboard({
         title="Bom trabalho, Franciane"
         sub="Seus levantamentos ficam seguros neste dispositivo, mesmo sem internet."
         action={
-          <button className="btn primary" onClick={() => go("projects")}>
+          <button
+            className="btn primary"
+            onClick={
+              !clients.length
+                ? newClient
+                : !projects.length
+                  ? newProject
+                  : () => go("projects")
+            }
+          >
             <Plus size={17} />
-            Novo levantamento
+            {!clients.length
+              ? "Cadastrar primeiro cliente"
+              : !projects.length
+                ? "Criar primeiro projeto"
+                : "Novo levantamento"}
           </button>
         }
       />
@@ -518,10 +537,10 @@ function Projects({
         sub="Organize ambientes, fotos e versões de cada entrega."
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn" onClick={addEnv}>
+            <button className="btn" onClick={addEnv} disabled={!projects.length}>
               + Ambiente
             </button>
-            <button className="btn primary" onClick={add}>
+            <button className="btn primary" onClick={add} disabled={!clients.length}>
               + Novo projeto
             </button>
           </div>

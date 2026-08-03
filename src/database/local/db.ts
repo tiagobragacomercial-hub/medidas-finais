@@ -93,6 +93,37 @@ class AppDb extends Dexie {
       trashItems: "id,entity,entityId,expiresAt,createdAt",
       floorPlans: "id,environmentId,updatedAt",
     });
+    this.version(5)
+      .stores({
+        clients: "id,name,status,updatedAt",
+        projects: "id,clientId,status,updatedAt",
+        environments: "id,projectId,status",
+        photos: "id,environmentId,syncState,createdAt",
+        annotations: "id,photoId,state,layer,updatedAt",
+        syncOperations: "id,entity,entityId,status,createdAt",
+        floors: "id,projectId,order",
+        walls: "id,environmentId,code,order",
+        auditLogs: "id,entity,entityId,action,createdAt",
+        trashItems: "id,entity,entityId,expiresAt,createdAt",
+        floorPlans: "id,environmentId,updatedAt",
+      })
+      .upgrade(async (tx) => {
+        await Promise.all(
+          [
+            "syncOperations",
+            "annotations",
+            "floorPlans",
+            "photos",
+            "walls",
+            "environments",
+            "floors",
+            "projects",
+            "clients",
+            "auditLogs",
+            "trashItems",
+          ].map((table) => tx.table(table).clear()),
+        );
+      });
   }
 }
 export const db = new AppDb();
