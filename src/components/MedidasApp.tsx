@@ -42,6 +42,7 @@ import {
   toolConfig,
 } from "../features/annotations/catalog";
 import { rectifyPath, wallCode } from "../features/floor-plan/geometry";
+import { httpSyncTransport, syncPending } from "../features/sync/processor";
 type Section =
   | "dashboard"
   | "clients"
@@ -87,6 +88,21 @@ export function MedidasApp() {
       ) || 0;
   useEffect(() => {
     navigator.serviceWorker?.register("/sw.js").catch(() => {});
+    let running = false;
+    const synchronize = async () => {
+      if (running || !navigator.onLine) return;
+      running = true;
+      const result = await syncPending(httpSyncTransport);
+      running = false;
+      if (result.sent) setToast(`${result.sent} item(ns) sincronizado(s)`);
+    };
+    void synchronize();
+    window.addEventListener("online", synchronize);
+    const timer = window.setInterval(synchronize, 15000);
+    return () => {
+      window.removeEventListener("online", synchronize);
+      window.clearInterval(timer);
+    };
   }, []);
   return (
     <div className="app">
@@ -1545,18 +1561,174 @@ function Portal({ projects }: { projects: Project[] }) {
     </>
   );
 }
-function pdf(p?: Project) {
+async function blobDataUrl(blob: Blob): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+async function pdf(p?: Project) {
   const d = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const project = p || (await db.projects.toCollection().first()),
+    environments = project
+      ? await db.environments.where("projectId").equals(project.id).toArray()
+      : [],
+    pageWidth = 297;
+  const header = (title: string, subtitle: string) => {
+    d.setFillColor(9, 44, 76);
+    d.rect(0, 0, pageWidth, 23, "F");
+    d.setTextColor(255);
+    d.setFontSize(15);
+    d.text(title, 14, 14);
+    d.setFontSize(8);
+    d.text(subtitle, 283, 14, { align: "right" });
+    d.setTextColor(30);
+  };
+  const footer = () => {
+    d.setDrawColor(210);
+    d.line(14, 198, 283, 198);
+    d.setFontSize(8);
+    d.setTextColor(90);
+    d.text("Documento técnico - nenhuma medida estimada", 14, 204);
+    d.text(String(d.getNumberOfPages()), 283, 204, { align: "right" });
+  };
   d.setFillColor(9, 44, 76);
-  d.rect(0, 0, 297, 55, "F");
+  d.rect(0, 0, pageWidth, 62, "F");
   d.setTextColor(255);
   d.setFontSize(25);
-  d.text("MEDIDAS FINAIS PARA PRODUCAO", 18, 31);
+  d.text("MEDIDAS FINAIS PARA PRODUÇÃO", 18, 32);
   d.setTextColor(30);
-  d.setFontSize(15);
-  d.text(p?.name || "Projeto demonstrativo", 18, 78);
+  d.setFontSize(18);
+  d.text(project?.name || "Projeto sem título", 18, 83);
   d.setFontSize(10);
-  d.text(`Unidade: ${p?.unit || "mm"} | Versao: ${p?.version || 1}`, 18, 89);
-  d.text("Documento estruturado. Nenhuma medida foi estimada.", 18, 103);
+  d.text(
+    `Unidade: ${project?.unit || "não informada"} | Versão: ${project?.version || 1}`,
+    18,
+    97,
+  );
+  d.text(project?.address || "Endereço não informado", 18, 108);
+  d.text("Documento estruturado. Nenhuma medida foi estimada.", 18, 126);
+  footer();
+
+  d.addPage();
+  header("ÍNDICE DE AMBIENTES", project?.name || "Projeto");
+  d.setFontSize(11);
+  if (!environments.length) d.text("Nenhum ambiente cadastrado.", 18, 42);
+  environments.forEach((environment, index) => {
+    d.text(
+      `${index + 1}. ${environment.name} - ${environment.type}`,
+      18,
+      42 + index * 8,
+    );
+  });
+  footer();
+
+  for (const environment of environments) {
+    const plan = await db.floorPlans
+        .where("environmentId")
+        .equals(environment.id)
+        .first(),
+      environmentPhotos = await db.photos
+        .where("environmentId")
+        .equals(environment.id)
+        .toArray();
+    d.addPage();
+    header(
+      environment.name.toUpperCase(),
+      `${environment.type} | Planta baixa`,
+    );
+    d.setDrawColor(205);
+    d.roundedRect(14, 31, 269, 155, 2, 2);
+    if (!plan?.points.length) {
+      d.setFontSize(11);
+      d.text("Planta baixa não cadastrada.", 24, 48);
+    } else {
+      const box = { x: 24, y: 40, w: 240, h: 132 };
+      d.setLineWidth(1.2);
+      d.setDrawColor(22, 59, 89);
+      plan.points.slice(1).forEach((point, index) => {
+        const previous = plan.points[index];
+        d.line(
+          box.x + previous.x * box.w,
+          box.y + previous.y * box.h,
+          box.x + point.x * box.w,
+          box.y + point.y * box.h,
+        );
+        d.setFontSize(8);
+        d.setTextColor(7, 93, 169);
+        d.text(
+          `Parede ${wallCode(index)}`,
+          box.x + ((previous.x + point.x) / 2) * box.w,
+          box.y + ((previous.y + point.y) / 2) * box.h - 2,
+        );
+      });
+      plan.elements.forEach((element) => {
+        const x = box.x + element.x * box.w,
+          y = box.y + element.y * box.h;
+        d.setFillColor(
+          element.type === "camera" ? 122 : 255,
+          element.type === "camera" ? 63 : 255,
+          element.type === "camera" ? 224 : 255,
+        );
+        d.circle(x, y, 2.5, "FD");
+        d.setFontSize(7);
+        d.text(element.type, x + 4, y + 2);
+      });
+    }
+    footer();
+
+    for (const photo of environmentPhotos) {
+      d.addPage();
+      header(environment.name.toUpperCase(), photo.name);
+      const sourceWidth = Math.max(photo.width, 1),
+        sourceHeight = Math.max(photo.height, 1),
+        maxWidth = 220,
+        maxHeight = 155,
+        scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight),
+        width = sourceWidth * scale,
+        height = sourceHeight * scale,
+        x = (pageWidth - width) / 2,
+        y = 29 + (160 - height) / 2;
+      try {
+        d.addImage(await blobDataUrl(photo.blob), x, y, width, height);
+      } catch {
+        d.setFontSize(10);
+        d.text("Foto indisponível para renderização.", 18, 45);
+      }
+      const annotations = await db.annotations
+        .where("photoId")
+        .equals(photo.id)
+        .toArray();
+      annotations
+        .filter((annotation) => annotation.state !== "hidden")
+        .forEach((annotation) => {
+          if (annotation.points.length > 1) {
+            const [start, end] = annotation.points;
+            d.setDrawColor(230, 47, 47);
+            d.setLineWidth(0.8);
+            d.line(
+              x + start.x * width,
+              y + start.y * height,
+              x + end.x * width,
+              y + end.y * height,
+            );
+            if (annotation.value) {
+              d.setFillColor(255, 255, 255);
+              d.setTextColor(170, 20, 20);
+              d.setFontSize(8);
+              d.text(
+                `${annotation.code}: ${annotation.value}`,
+                x + ((start.x + end.x) / 2) * width,
+                y + ((start.y + end.y) / 2) * height - 2,
+                { align: "center" },
+              );
+            }
+          }
+        });
+      footer();
+    }
+  }
   d.save("medidas-finais-para-producao.pdf");
 }

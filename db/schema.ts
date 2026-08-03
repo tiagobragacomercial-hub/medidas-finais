@@ -167,3 +167,13 @@ export const auditLogs = sqliteTable("audit_logs", {
   metadataJson: text("metadata_json").notNull(),
   createdAt: text("created_at").notNull(),
 });
+export const syncRecords = sqliteTable("sync_records", {
+  id: text("id").primaryKey(),
+  entity: text("entity").notNull(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  checksum: text("checksum"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

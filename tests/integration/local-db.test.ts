@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { db, now, queue, uid } from "../../src/database/local/db.ts";
+import { syncPending } from "../../src/features/sync/processor.ts";
 test("cliente e operação sobrevivem a fechamento e reabertura do banco", async () => {
   await db.delete();
   await db.open();
@@ -60,6 +61,35 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
   assert.equal(plan?.confirmed, true);
   assert.equal(plan?.points.length, 3);
   assert.equal(plan?.elements[0].type, "door");
+  await db.delete();
+});
+test("sync só confirma após aceite e preserva a cópia local", async () => {
+  await db.delete();
+  await db.open();
+  const id = uid(),
+    timestamp = now();
+  await db.clients.put({
+    id,
+    name: "Cópia protegida",
+    phone: "",
+    email: "",
+    address: "",
+    notes: "",
+    status: "active",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  await queue("client", id, "create");
+  const failure = await syncPending(async () => {
+    throw new Error("servidor indisponível");
+  });
+  assert.equal(failure.failed, 1);
+  assert.equal((await db.clients.get(id))?.name, "Cópia protegida");
+  assert.equal((await db.syncOperations.toArray())[0]?.status, "failed");
+  const success = await syncPending(async () => ({ accepted: true }));
+  assert.equal(success.sent, 1);
+  assert.equal((await db.clients.get(id))?.name, "Cópia protegida");
+  assert.equal((await db.syncOperations.toArray())[0]?.status, "synced");
   await db.delete();
 });
 test.after(async () => {
