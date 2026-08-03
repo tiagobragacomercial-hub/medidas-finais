@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   Lock,
   Map,
+  Mic,
   Plus,
   QrCode,
   Save,
@@ -31,7 +32,6 @@ import {
   Users,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { jsPDF } from "jspdf";
 import { exportAnnotatedPng } from "../features/photos/export-png";
 import { normalizePointer } from "../features/annotations/geometry";
 import { measurementValueSchema } from "../schemas/entities";
@@ -50,6 +50,7 @@ type Section =
   | "editor"
   | "floorplan"
   | "sync"
+  | "voice"
   | "portal";
 const types = [
   "Cozinha",
@@ -170,6 +171,12 @@ export function MedidasApp() {
             click={() => setSection("sync")}
           />
           <Side
+            icon={<Mic />}
+            label="Assistente de voz"
+            active={section === "voice"}
+            click={() => setSection("voice")}
+          />
+          <Side
             icon={<QrCode />}
             label="Portal do cliente"
             active={section === "portal"}
@@ -204,6 +211,9 @@ export function MedidasApp() {
           )}{" "}
           {section === "floorplan" && <FloorPlan envs={envs} />}{" "}
           {section === "sync" && <Sync pending={pending} />}{" "}
+          {section === "voice" && (
+            <VoiceAssistant go={setSection} openModal={setModal} />
+          )}{" "}
           {section === "portal" && <Portal projects={projects} />}
         </main>
       </div>
@@ -1480,6 +1490,130 @@ function FloorPlanLegacy() {
     </>
   );
 }
+type VoiceRecognition = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start(): void;
+  stop(): void;
+  onresult:
+    | ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void)
+    | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+function VoiceAssistant({
+  go,
+  openModal,
+}: {
+  go: (section: Section) => void;
+  openModal: (modal: "client" | "project" | "environment") => void;
+}) {
+  const [listening, setListening] = useState(false),
+    [transcript, setTranscript] = useState(""),
+    [supported, setSupported] = useState(true),
+    recognition = useRef<VoiceRecognition | null>(null);
+  useEffect(() => {
+    const Constructor =
+      (
+        window as unknown as {
+          SpeechRecognition?: new () => VoiceRecognition;
+          webkitSpeechRecognition?: new () => VoiceRecognition;
+        }
+      ).SpeechRecognition ||
+      (
+        window as unknown as {
+          webkitSpeechRecognition?: new () => VoiceRecognition;
+        }
+      ).webkitSpeechRecognition;
+    if (!Constructor) {
+      setSupported(false);
+      return;
+    }
+    const instance = new Constructor();
+    instance.lang = "pt-BR";
+    instance.interimResults = false;
+    instance.continuous = false;
+    instance.onresult = (event) =>
+      setTranscript(event.results[0][0].transcript);
+    instance.onerror = () => setListening(false);
+    instance.onend = () => setListening(false);
+    recognition.current = instance;
+    return () => instance.stop();
+  }, []);
+  function execute() {
+    const command = transcript.toLocaleLowerCase("pt-BR");
+    const destinations: Array<[string, Section]> = [
+      ["clientes", "clients"],
+      ["projetos", "projects"],
+      ["fotos", "editor"],
+      ["editor", "editor"],
+      ["planta", "floorplan"],
+      ["sincronização", "sync"],
+      ["portal", "portal"],
+    ];
+    const destination = destinations.find(([word]) => command.includes(word));
+    if (command.includes("novo cliente")) openModal("client");
+    else if (command.includes("novo projeto")) openModal("project");
+    else if (command.includes("novo ambiente")) openModal("environment");
+    else if (destination) go(destination[1]);
+    setTranscript("");
+  }
+  return (
+    <>
+      <Head
+        eye="Comandos confirmados"
+        title="Assistente de voz"
+        sub="O sistema transcreve primeiro e só executa depois da sua confirmação."
+      />
+      <section className="card" style={{ maxWidth: 760 }}>
+        <h2>{listening ? "Ouvindo…" : "Diga um comando"}</h2>
+        <p className="subtitle">
+          Exemplos: abrir clientes, abrir planta, novo projeto ou novo ambiente.
+        </p>
+        {!supported && (
+          <p className="pill warn">
+            Reconhecimento de voz indisponível neste navegador.
+          </p>
+        )}
+        <label className="field">
+          <span>Transcrição editável</span>
+          <textarea
+            value={transcript}
+            onChange={(event) => setTranscript(event.target.value)}
+            placeholder="A fala aparecerá aqui antes de qualquer ação"
+          />
+        </label>
+        <div className="actions">
+          <button
+            className="btn primary"
+            disabled={!supported || listening}
+            onClick={() => {
+              setListening(true);
+              recognition.current?.start();
+            }}
+          >
+            <Mic size={16} /> {listening ? "Ouvindo" : "Começar a ouvir"}
+          </button>
+          <button
+            className="btn"
+            disabled={!transcript.trim()}
+            onClick={execute}
+          >
+            Confirmar comando
+          </button>
+          <button
+            className="btn"
+            disabled={!transcript}
+            onClick={() => setTranscript("")}
+          >
+            Cancelar
+          </button>
+        </div>
+      </section>
+    </>
+  );
+}
 function Sync({ pending }: { pending: number }) {
   return (
     <>
@@ -1508,13 +1642,71 @@ function Sync({ pending }: { pending: number }) {
   );
 }
 function Portal({ projects }: { projects: Project[] }) {
-  const [qr, setQr] = useState("");
-  useEffect(() => {
-    QRCode.toDataURL(`${location.origin}/p/desenvolvimento-seguro`, {
-      margin: 2,
-      width: 180,
-    }).then(setQr);
-  }, []);
+  const [qr, setQr] = useState(""),
+    [access, setAccess] = useState<{ url: string; code: string } | null>(null),
+    [publishing, setPublishing] = useState(false),
+    project = projects[0];
+  async function publish() {
+    if (!project || publishing) return;
+    setPublishing(true);
+    try {
+      await syncPending(httpSyncTransport);
+      const [client, environments, photos, annotations, floorPlans] =
+        await Promise.all([
+          db.clients.get(project.clientId),
+          db.environments.where("projectId").equals(project.id).toArray(),
+          db.photos.toArray(),
+          db.annotations.toArray(),
+          db.floorPlans.toArray(),
+        ]);
+      const environmentIds = new Set(environments.map((item) => item.id)),
+        projectPhotos = photos.filter((item) =>
+          environmentIds.has(item.environmentId),
+        ),
+        photoIds = new Set(projectPhotos.map((item) => item.id)),
+        snapshot = {
+          project,
+          client: client ? { id: client.id, name: client.name } : null,
+          environments,
+          photos: projectPhotos.map((item) => ({
+            id: item.id,
+            environmentId: item.environmentId,
+            name: item.name,
+            width: item.width,
+            height: item.height,
+            createdAt: item.createdAt,
+          })),
+          annotations: annotations.filter((item) => photoIds.has(item.photoId)),
+          floorPlans: floorPlans.filter((item) =>
+            environmentIds.has(item.environmentId),
+          ),
+        };
+      const form = new FormData();
+      form.set("snapshot", JSON.stringify(snapshot));
+      form.set("pdf", await pdf(project, false), "medidas-finais.pdf");
+      const response = await fetch("/api/publications", {
+        method: "POST",
+        body: form,
+      });
+      if (!response.ok) throw new Error("Não foi possível publicar");
+      const result = (await response.json()) as { url: string; code: string };
+      setAccess(result);
+      setQr(
+        await QRCode.toDataURL(`${location.origin}${result.url}`, {
+          margin: 2,
+          width: 180,
+        }),
+      );
+      await db.projects.update(project.id, {
+        status: "published",
+        version: project.version + 1,
+        updatedAt: now(),
+      });
+      await queue("project", project.id, "update");
+    } finally {
+      setPublishing(false);
+    }
+  }
   return (
     <>
       <Head
@@ -1526,9 +1718,7 @@ function Portal({ projects }: { projects: Project[] }) {
         <div className="eyebrow" style={{ color: "#8ecbff" }}>
           Pasta digital
         </div>
-        <h1>
-          {projects[0]?.name || "Apartamento Centro — Levantamento Completo"}
-        </h1>
+        <h1>{project?.name || "Selecione um projeto para publicar"}</h1>
         <p>Versão publicada 1 · acesso somente leitura</p>
       </section>
       <div className="portal-grid">
@@ -1540,7 +1730,11 @@ function Portal({ projects }: { projects: Project[] }) {
         <div className="portal-tile">
           <FileText />
           <h2>PDF técnico</h2>
-          <button className="btn" onClick={() => pdf(projects[0])}>
+          <button
+            className="btn"
+            disabled={!project}
+            onClick={() => pdf(project)}
+          >
             <Download size={15} />
             Gerar PDF local
           </button>
@@ -1554,8 +1748,17 @@ function Portal({ projects }: { projects: Project[] }) {
               alt="QR Code de desenvolvimento"
             />
           )}
-          <h2>Código: DEMO-4827</h2>
+          <h2>
+            {access ? `Código: ${access.code}` : "Acesso ainda não publicado"}
+          </h2>
           <p className="subtitle">Token revogável e sem dados pessoais.</p>
+          <button
+            className="btn primary"
+            disabled={!project || publishing}
+            onClick={publish}
+          >
+            {publishing ? "Publicando…" : "Publicar versão e gerar acesso"}
+          </button>
         </div>
       </div>
     </>
@@ -1569,7 +1772,8 @@ async function blobDataUrl(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
-async function pdf(p?: Project) {
+async function pdf(p?: Project, save = true): Promise<Blob> {
+  const { jsPDF } = await import("jspdf");
   const d = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const project = p || (await db.projects.toCollection().first()),
     environments = project
@@ -1730,5 +1934,7 @@ async function pdf(p?: Project) {
       footer();
     }
   }
-  d.save("medidas-finais-para-producao.pdf");
+  const result = d.output("blob");
+  if (save) d.save("medidas-finais-para-producao.pdf");
+  return result;
 }

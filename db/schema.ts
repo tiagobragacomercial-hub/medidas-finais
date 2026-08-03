@@ -177,3 +177,15 @@ export const syncRecords = sqliteTable("sync_records", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+export const portalPublications = sqliteTable("portal_publications", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  codeHash: text("code_hash").notNull().unique(),
+  snapshotJson: text("snapshot_json").notNull(),
+  pdfObjectKey: text("pdf_object_key").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  expiresAt: text("expires_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
