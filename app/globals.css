@@ -364,7 +364,7 @@ button {
 }
 .canvas {
   width: 92%;
-  height: 88%;
+  max-height: 88%;
   background: #f9fbfd;
   border-radius: 5px;
   position: relative;

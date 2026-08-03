@@ -15,18 +15,34 @@ test("a aplicação preserva as regras essenciais do produto", async () => {
     ),
   ]);
   assert.match(app, /Foto original salva neste dispositivo/);
-  assert.match(app, /Nenhuma medida foi estimada|Nenhuma medida foi estimada/i);
+  assert.match(app, /Nenhuma medida foi estimada/i);
   assert.match(app, /Somente a versão publicada/);
   assert.match(db, /medidas-finais/);
   assert.equal(JSON.parse(manifest).display, "standalone");
 });
 
 test("coordenadas de marcações são proporcionais", async () => {
-  const app = await readFile(
-    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+  const [geometry, app] = await Promise.all([
+    readFile(
+      new URL("../src/features/annotations/geometry.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/components/MedidasApp.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(geometry, /clientX\s*-\s*rect\.left/);
+  assert.match(geometry, /point\.x\s*\*\s*width/);
+  assert.match(app, /p1\.x\s*\*\s*100/);
+});
+
+test("exportação usa a foto original e omite elementos ocultos", async () => {
+  const exporter = await readFile(
+    new URL("../src/features/photos/export-png.ts", import.meta.url),
     "utf8",
   );
-  assert.match(app, /clientX\s*-\s*r\.left/);
-  assert.match(app, /p1\.x\s*\*\s*100/);
-  assert.match(app, /p1\.y\s*\*\s*100/);
+  assert.match(exporter, /createImageBitmap\(photo\.blob\)/);
+  assert.match(exporter, /state\s*!==\s*"hidden"/);
+  assert.match(exporter, /image\/png/);
 });

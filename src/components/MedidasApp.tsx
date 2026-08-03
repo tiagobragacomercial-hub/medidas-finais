@@ -30,6 +30,9 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { jsPDF } from "jspdf";
+import { exportAnnotatedPng } from "../features/photos/export-png";
+import { normalizePointer } from "../features/annotations/geometry";
+import { measurementValueSchema } from "../schemas/entities";
 type Section =
   | "dashboard"
   | "clients"
@@ -678,13 +681,15 @@ function Editor({
   async function draw(e: React.PointerEvent) {
     if (tool !== "linear" || !photo) return;
     const r = canvas.current!.getBoundingClientRect(),
-      p = {
-        x: (e.clientX - r.left) / r.width,
-        y: (e.clientY - r.top) / r.height,
-      };
+      p = normalizePointer(e.clientX, e.clientY, r);
     if (!start) return setStart(p);
     const value = prompt("Informe a medida (somente número):", "");
     if (value === null) return setStart(null);
+    const parsed = measurementValueSchema.safeParse(value.trim());
+    if (!parsed.success) {
+      notify("Informe somente o número da medida");
+      return setStart(null);
+    }
     const id = uid();
     await db.annotations.put({
       id,
@@ -693,7 +698,7 @@ function Editor({
       code: `M${String(anns.length + 1).padStart(2, "0")}`,
       state: "protected",
       points: [start, p],
-      value,
+      value: parsed.data,
       textPosition: "above",
       description: "",
       layer: anns.length + 1,
@@ -706,10 +711,30 @@ function Editor({
     notify("Medida salva e protegida");
   }
   async function edit(a: Annotation) {
+    const snapshot = structuredClone(a);
     await db.annotations.update(a.id, { state: "editing" });
     const value = prompt("Corrigir valor:", a.value);
+    if (value === null) {
+      await db.annotations.put(snapshot);
+      notify("Alterações canceladas");
+      return;
+    }
+    const parsed = measurementValueSchema.safeParse(value.trim());
+    if (!parsed.success) {
+      await db.annotations.put(snapshot);
+      notify("Valor inválido; versão anterior restaurada");
+      return;
+    }
+    await db.auditLogs.put({
+      id: uid(),
+      entity: "annotation",
+      entityId: a.id,
+      action: "update",
+      metadata: { before: snapshot },
+      createdAt: now(),
+    });
     await db.annotations.update(a.id, {
-      value: value ?? a.value,
+      value: parsed.data,
       state: "protected",
       version: a.version + 1,
       updatedAt: now(),
@@ -766,7 +791,14 @@ function Editor({
           ))}
         </div>
         <div className="canvaswrap">
-          <div ref={canvas} className="canvas" onPointerDown={draw}>
+          <div
+            ref={canvas}
+            className="canvas"
+            onPointerDown={draw}
+            style={
+              photo ? { aspectRatio: `${photo.width}/${photo.height}` } : {}
+            }
+          >
             {photo ? (
               <>
                 <img src={url} alt={photo.name} />
@@ -814,11 +846,38 @@ function Editor({
                 {a.state === "protected" ? "Protegida" : "Em edição"}
               </small>
               {a.id === selected && (
-                <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 5,
+                    marginTop: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
                   <button className="btn" onClick={() => edit(a)}>
                     <Lock size={13} />
                     Desbloquear
                   </button>
+                  <select
+                    aria-label="Posição do número"
+                    value={a.textPosition}
+                    onChange={async (e) => {
+                      await db.annotations.update(a.id, {
+                        textPosition: e.target
+                          .value as Annotation["textPosition"],
+                        version: a.version + 1,
+                        updatedAt: now(),
+                      });
+                      await queue("annotation", a.id, "update");
+                    }}
+                  >
+                    <option value="between">Entre</option>
+                    <option value="above">Acima</option>
+                    <option value="below">Abaixo</option>
+                    <option value="left">Esquerda</option>
+                    <option value="right">Direita</option>
+                    <option value="free">Livre</option>
+                  </select>
                   <button
                     className="btn danger"
                     onClick={() =>
@@ -831,6 +890,22 @@ function Editor({
               )}
             </div>
           ))}
+          {photo && (
+            <button
+              className="btn"
+              style={{ width: "100%", justifyContent: "center", marginTop: 10 }}
+              onClick={() =>
+                exportAnnotatedPng(photo, anns)
+                  .then(() =>
+                    notify("PNG exportado sem alterar a foto original"),
+                  )
+                  .catch(() => notify("Falha ao exportar PNG"))
+              }
+            >
+              <Download size={14} />
+              Exportar PNG
+            </button>
+          )}
         </aside>
       </div>
     </>
