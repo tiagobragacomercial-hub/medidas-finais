@@ -13,6 +13,7 @@
 - Teste manual: pendente. O navegador integrado não estava disponível nesta sessão; nenhuma fase foi aprovada com base apenas nos testes de rota.
 - Bloqueios: nenhuma credencial impede desenvolvimento; três imagens de referência citadas no pacote não foram encontradas.
 - Decisões: IndexedDB/Dexie local, D1 para registros, R2 privado para mídias, adaptadores de fornecedor.
+- Supabase: pasta, migração PostgreSQL, buckets privados, RLS e adaptador configurável preparados. Aplicação remota aguarda autorização/login em um projeto Supabase.
 - Próxima ação: publicar a versão, validar migrações e executar teste manual assim que um navegador integrado estiver disponível.
 
 ## Testes de aceitação bloqueantes
