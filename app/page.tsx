@@ -1,5 +1,5 @@
-import { MedidasApp } from "../src/components/MedidasApp";
+import { OwnerLogin } from "../src/components/OwnerLogin";
 
 export default function Home() {
-  return <MedidasApp />;
+  return <OwnerLogin />;
 }

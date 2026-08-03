@@ -20,6 +20,9 @@
 - Identidade visual: arte oficial aplicada sem alteração em `public/app-icon.png` (web/PWA/aba) e `assets/icon.png` (futura compilação móvel).
 - Pré-APK: definições confirmadas, recursos necessários e bloqueios de produto/loja registrados em `docs/PRE_APK.md`. Nenhum identificador permanente será inventado ou compilado sem confirmação.
 - Próxima ação: publicar a versão, validar migrações e executar teste manual assim que um navegador integrado estiver disponível.
+- Vercel: prévia de produção publicada em `https://medidas-finais-beryl.vercel.app`; variáveis públicas do Supabase cadastradas no ambiente de produção.
+- Autenticação: fluxo antigo exclusivo do ambiente ChatGPT removido da entrada principal. Login real da proprietária via Supabase implementado, com sessão persistente e proteção da rota `/admin`.
+- Verificação após correção do login: lint, TypeScript, 5 testes unitários, 3 testes de integração, build e 6 testes E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

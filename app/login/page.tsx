@@ -1,4 +1,5 @@
-import { redirect } from "next/navigation";
+import { OwnerLogin } from "../../src/components/OwnerLogin";
+
 export default function Login() {
-  redirect("/signin-with-chatgpt?return_to=/admin");
+  return <OwnerLogin />;
 }
