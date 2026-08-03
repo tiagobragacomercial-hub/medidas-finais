@@ -47,6 +47,15 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
       { x: 0.8, y: 0.7 },
     ],
     elements: [{ id: uid(), type: "door", x: 0.5, y: 0.1 }],
+    measurements: [
+      {
+        id: uid(),
+        start: { x: 0.1, y: 0.15 },
+        end: { x: 0.8, y: 0.15 },
+        value: "3200",
+        unit: "mm",
+      },
+    ],
     confirmed: true,
     version: 1,
     createdAt: timestamp,
@@ -61,6 +70,7 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
   assert.equal(plan?.confirmed, true);
   assert.equal(plan?.points.length, 3);
   assert.equal(plan?.elements[0].type, "door");
+  assert.equal(plan?.measurements?.[0].value, "3200");
   await db.delete();
 });
 test("sync só confirma após aceite e preserva a cópia local", async () => {

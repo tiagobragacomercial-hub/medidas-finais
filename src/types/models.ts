@@ -109,11 +109,19 @@ export interface FloorPlanElement {
   direction?: number;
   photoId?: string;
 }
+export interface FloorPlanMeasurement {
+  id: string;
+  start: Point;
+  end: Point;
+  value: string;
+  unit: "mm" | "cm" | "m";
+}
 export interface FloorPlanRecord {
   id: string;
   environmentId: string;
   points: Point[];
   elements: FloorPlanElement[];
+  measurements?: FloorPlanMeasurement[];
   confirmed: boolean;
   version: number;
   createdAt: string;

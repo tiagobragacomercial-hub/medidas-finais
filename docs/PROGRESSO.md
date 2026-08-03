@@ -9,6 +9,7 @@
 - Pendente: teste manual visual final e itens avançados ainda não cobertos da Fase 2.
 - Testes automáticos atuais: lint aprovado; TypeScript aprovado; 5 testes unitários aprovados; 2 testes de integração IndexedDB aprovados; build aprovado; 5 testes E2E de rotas aprovados.
 - Planta baixa: persistência local com migração Dexie v4, retificação opcional, seleção e movimentação de vértices/elementos, exclusão, sentido de abertura de porta e câmera vinculada a foto do ambiente. Nenhuma medida é inferida.
+- Cotas da planta: ferramenta manual de dois pontos com valor real digitado pelo usuário, unidade do projeto, edição, exclusão, persistência, sincronização e renderização no PDF. A confirmação é bloqueada enquanto existir cota sem valor.
 - Defeito encontrado e corrigido pelos testes: índice `entityId` ausente na fila de sincronização; migração local v3 adicionada.
 - Teste manual: pendente. O navegador integrado não estava disponível nesta sessão; nenhuma fase foi aprovada com base apenas nos testes de rota.
 - Bloqueios: nenhuma credencial impede desenvolvimento; três imagens de referência citadas no pacote não foram encontradas.

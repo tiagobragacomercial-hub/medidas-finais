@@ -7,6 +7,7 @@ import type {
   Client,
   Environment,
   FloorPlanElement,
+  FloorPlanMeasurement,
   FloorPlanRecord,
   Photo,
   Project,
@@ -1126,12 +1127,22 @@ function FloorPlan({ envs }: { envs: Environment[] }) {
 }
 function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
-    [mode, setMode] = useState<"wall" | "door" | "window" | "camera">("wall"),
+    [mode, setMode] = useState<
+      "wall" | "door" | "window" | "camera" | "measure"
+    >("wall"),
     [elements, setElements] = useState<FloorPlanElement[]>([]),
+    [measurements, setMeasurements] = useState<FloorPlanMeasurement[]>([]),
+    [measurementStart, setMeasurementStart] = useState<{
+      x: number;
+      y: number;
+    } | null>(null),
     [confirmed, setConfirmed] = useState(false),
     [hydratedEnvironment, setHydratedEnvironment] = useState(""),
     [selected, setSelected] = useState<
-      { kind: "point"; index: number } | { kind: "element"; id: string } | null
+      | { kind: "point"; index: number }
+      | { kind: "element"; id: string }
+      | { kind: "measurement"; id: string }
+      | null
     >(null),
     [dragging, setDragging] = useState(false);
   const plan = useLiveQuery<FloorPlanRecord | undefined>(
@@ -1149,6 +1160,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           : Promise.resolve<Photo[]>([]),
       [environment?.id],
     ) || [];
+  const floorPlanProject = useLiveQuery<Project | undefined>(
+    () =>
+      environment
+        ? db.projects.get(environment.projectId)
+        : Promise.resolve<Project | undefined>(undefined),
+    [environment?.projectId],
+  );
   useEffect(() => {
     if (
       !environment ||
@@ -1158,6 +1176,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       return;
     setPoints(plan?.points || []);
     setElements(plan?.elements || []);
+    setMeasurements(plan?.measurements || []);
     setConfirmed(plan?.confirmed || false);
     setHydratedEnvironment(environment.id);
   }, [environment, plan, hydratedEnvironment]);
@@ -1176,6 +1195,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           environmentId: environment.id,
           points,
           elements,
+          measurements,
           confirmed,
           version: (existing?.version || 0) + 1,
           createdAt: existing?.createdAt || timestamp,
@@ -1185,13 +1205,37 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       });
     }, 350);
     return () => clearTimeout(timer);
-  }, [points, elements, confirmed, environment, hydratedEnvironment]);
+  }, [
+    points,
+    elements,
+    measurements,
+    confirmed,
+    environment,
+    hydratedEnvironment,
+  ]);
   function add(e: React.PointerEvent<HTMLDivElement>) {
     if (confirmed || !environment || e.target !== e.currentTarget) return;
     const r = e.currentTarget.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
     if (mode === "wall") setPoints((v) => [...v, p]);
-    else setElements((v) => [...v, { id: uid(), type: mode, ...p }]);
+    else if (mode === "measure") {
+      if (!measurementStart) setMeasurementStart(p);
+      else {
+        const id = uid();
+        setMeasurements((items) => [
+          ...items,
+          {
+            id,
+            start: measurementStart,
+            end: p,
+            value: "",
+            unit: floorPlanProject?.unit || "mm",
+          },
+        ]);
+        setSelected({ kind: "measurement", id });
+        setMeasurementStart(null);
+      }
+    } else setElements((v) => [...v, { id: uid(), type: mode, ...p }]);
   }
   function pointerPosition(e: React.PointerEvent<SVGSVGElement>) {
     return normalizePointer(
@@ -1207,7 +1251,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       setPoints((items) =>
         items.map((item, index) => (index === selected.index ? p : item)),
       );
-    else
+    else if (selected.kind === "element")
       setElements((items) =>
         items.map((item) =>
           item.id === selected.id ? { ...item, ...p } : item,
@@ -1218,8 +1262,12 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     if (!selected || confirmed) return;
     if (selected.kind === "point")
       setPoints((items) => items.filter((_, i) => i !== selected.index));
-    else
+    else if (selected.kind === "element")
       setElements((items) => items.filter((item) => item.id !== selected.id));
+    else
+      setMeasurements((items) =>
+        items.filter((item) => item.id !== selected.id),
+      );
     setSelected(null);
   }
   return (
@@ -1227,7 +1275,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       <Head
         eye="Planta baixa"
         title="Desenho do ambiente"
-        sub="Desenhe a geometria real; o sistema organiza traços, mas não cria medidas."
+        sub="Desenhe a geometria e informe manualmente cada medida real; nenhum valor é calculado ou inventado."
       />
       {!environment && (
         <section className="card empty">
@@ -1269,6 +1317,73 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   </text>
                 </g>
               ))}
+              {measurements.map((measurement) => {
+                const selectedMeasurement =
+                    selected?.kind === "measurement" &&
+                    selected.id === measurement.id,
+                  x1 = measurement.start.x * 1000,
+                  y1 = measurement.start.y * 600,
+                  x2 = measurement.end.x * 1000,
+                  y2 = measurement.end.y * 600;
+                return (
+                  <g
+                    key={measurement.id}
+                    role="button"
+                    aria-label={`Cota ${measurement.value || "sem valor"}`}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      if (!confirmed)
+                        setSelected({
+                          kind: "measurement",
+                          id: measurement.id,
+                        });
+                    }}
+                  >
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={selectedMeasurement ? "#f59e0b" : "#d12f2f"}
+                      strokeWidth={selectedMeasurement ? 6 : 4}
+                      strokeDasharray="12 7"
+                    />
+                    <circle cx={x1} cy={y1} r="7" fill="#d12f2f" />
+                    <circle cx={x2} cy={y2} r="7" fill="#d12f2f" />
+                    <rect
+                      x={(x1 + x2) / 2 - 48}
+                      y={(y1 + y2) / 2 - 22}
+                      width="96"
+                      height="28"
+                      rx="6"
+                      fill="#fff"
+                      stroke="#d12f2f"
+                    />
+                    <text
+                      x={(x1 + x2) / 2}
+                      y={(y1 + y2) / 2 - 3}
+                      textAnchor="middle"
+                      fill="#9f1f1f"
+                      fontWeight="700"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {measurement.value
+                        ? `${measurement.value} ${measurement.unit}`
+                        : "Informe a medida"}
+                    </text>
+                  </g>
+                );
+              })}
+              {measurementStart && (
+                <circle
+                  cx={measurementStart.x * 1000}
+                  cy={measurementStart.y * 600}
+                  r="12"
+                  fill="#f59e0b"
+                  stroke="#fff"
+                  strokeWidth="4"
+                />
+              )}
               {points.map((p, i) => (
                 <circle
                   key={`p${i}`}
@@ -1339,25 +1454,50 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         <aside className="card aside">
           <h2>Ferramentas da planta</h2>
           <div className="actions" style={{ flexWrap: "wrap" }}>
-            {(["wall", "door", "window", "camera"] as const).map((x) => (
-              <button
-                key={x}
-                className={`btn ${mode === x ? "primary" : ""}`}
-                onClick={() => setMode(x)}
-              >
-                {x}
-              </button>
-            ))}
+            {(["wall", "door", "window", "camera", "measure"] as const).map(
+              (x) => (
+                <button
+                  key={x}
+                  className={`btn ${mode === x ? "primary" : ""}`}
+                  onClick={() => {
+                    setMode(x);
+                    setMeasurementStart(null);
+                  }}
+                >
+                  {x === "measure" ? "medida" : x}
+                </button>
+              ),
+            )}
           </div>
+          {mode === "measure" && (
+            <p className="subtitle">
+              {measurementStart
+                ? "Marque o segundo ponto da cota."
+                : "Marque dois pontos e depois digite a medida real."}
+            </p>
+          )}
           <button
             className="btn"
             onClick={() => setPoints(rectifyPath(points))}
           >
             Prévia de linhas retas
           </button>
-          <button className="btn" onClick={() => setConfirmed((v) => !v)}>
+          <button
+            className="btn"
+            disabled={
+              !confirmed &&
+              measurements.some((measurement) => !measurement.value)
+            }
+            onClick={() => setConfirmed((v) => !v)}
+          >
             {confirmed ? "Editar novamente" : "Confirmar planta"}
           </button>
+          {!confirmed &&
+            measurements.some((measurement) => !measurement.value) && (
+              <p className="pill warn">
+                Informe todas as medidas antes de confirmar a planta.
+              </p>
+            )}
           {selected?.kind === "element" &&
             elements.find((item) => item.id === selected.id)?.type ===
               "door" && (
@@ -1380,6 +1520,39 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 Girar abertura da porta
               </button>
             )}
+          {selected?.kind === "measurement" && (
+            <label className="field">
+              <span>Valor real da medida</span>
+              <div className="actions" style={{ alignItems: "center" }}>
+                <input
+                  inputMode="decimal"
+                  placeholder="Ex.: 3200"
+                  disabled={confirmed}
+                  value={
+                    measurements.find((item) => item.id === selected.id)
+                      ?.value || ""
+                  }
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value !== "" && !/^\d*(?:[.,]\d*)?$/.test(value))
+                      return;
+                    setMeasurements((items) =>
+                      items.map((item) =>
+                        item.id === selected.id ? { ...item, value } : item,
+                      ),
+                    );
+                  }}
+                  aria-label="Valor real da medida da planta"
+                />
+                <strong>
+                  {measurements.find((item) => item.id === selected.id)?.unit ||
+                    floorPlanProject?.unit ||
+                    "mm"}
+                </strong>
+              </div>
+              <small>O sistema nunca calcula ou preenche este valor.</small>
+            </label>
+          )}
           {selected?.kind === "element" &&
             elements.find((item) => item.id === selected.id)?.type ===
               "camera" && (
@@ -1422,6 +1595,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             onClick={() => {
               setPoints([]);
               setElements([]);
+              setMeasurements([]);
+              setMeasurementStart(null);
               setConfirmed(false);
             }}
           >
@@ -1429,7 +1604,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           </button>
           <p className="subtitle">
             {points.length > 1
-              ? `${points.length - 1} paredes · ${elements.length} elementos · nenhuma medida criada`
+              ? `${points.length - 1} paredes · ${elements.length} elementos · ${measurements.length} medidas informadas manualmente`
               : "Aguardando o primeiro traço"}
           </p>
         </aside>
@@ -1879,6 +2054,28 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
         d.circle(x, y, 2.5, "FD");
         d.setFontSize(7);
         d.text(element.type, x + 4, y + 2);
+      });
+      (plan.measurements || []).forEach((measurement) => {
+        const x1 = box.x + measurement.start.x * box.w,
+          y1 = box.y + measurement.start.y * box.h,
+          x2 = box.x + measurement.end.x * box.w,
+          y2 = box.y + measurement.end.y * box.h;
+        d.setDrawColor(190, 35, 35);
+        d.setLineWidth(0.5);
+        d.line(x1, y1, x2, y2);
+        d.circle(x1, y1, 1, "F");
+        d.circle(x2, y2, 1, "F");
+        if (measurement.value) {
+          d.setFillColor(255, 255, 255);
+          d.setTextColor(155, 25, 25);
+          d.setFontSize(8);
+          d.text(
+            `${measurement.value} ${measurement.unit}`,
+            (x1 + x2) / 2,
+            (y1 + y2) / 2 - 2,
+            { align: "center" },
+          );
+        }
       });
     }
     footer();
