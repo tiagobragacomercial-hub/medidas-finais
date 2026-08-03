@@ -153,6 +153,59 @@ create table public.audit_logs (
   created_at timestamptz not null default now()
 );
 
+alter table public.clients
+  add column device_id text not null default 'legacy',
+  add column sync_status text not null default 'SINCRONIZADO',
+  add column last_sync_at timestamptz;
+alter table public.projects
+  add column device_id text not null default 'legacy',
+  add column sync_status text not null default 'SINCRONIZADO',
+  add column last_sync_at timestamptz;
+alter table public.environments
+  add column device_id text not null default 'legacy',
+  add column sync_status text not null default 'SINCRONIZADO',
+  add column last_sync_at timestamptz;
+alter table public.photos
+  add column device_id text not null default 'legacy',
+  add column sync_status text not null default 'SINCRONIZADO',
+  add column last_sync_at timestamptz;
+alter table public.annotations
+  add column device_id text not null default 'legacy',
+  add column sync_status text not null default 'SINCRONIZADO',
+  add column last_sync_at timestamptz;
+alter table public.floor_plans
+  add column device_id text not null default 'legacy',
+  add column sync_status text not null default 'SINCRONIZADO',
+  add column last_sync_at timestamptz,
+  add column deleted_at timestamptz;
+
+create table public.entity_history (
+  id bigint generated always as identity primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  entity text not null,
+  entity_id uuid not null,
+  version integer not null,
+  device_id text not null,
+  operation text not null check (operation in ('create','update','delete','restore','conflict_resolution')),
+  before_data jsonb,
+  after_data jsonb,
+  user_id uuid references auth.users(id),
+  created_at timestamptz not null default now()
+);
+
+alter table public.entity_history enable row level security;
+create policy entity_history_select on public.entity_history for select
+using (public.is_org_member(organization_id));
+create policy entity_history_write on public.entity_history for insert
+with check (public.is_org_member(organization_id, array['owner','admin','editor']));
+
+alter table public.clients add constraint clients_sync_status_check check (sync_status in ('SALVO_LOCALMENTE','AGUARDANDO_SINCRONIZACAO','SINCRONIZANDO','SINCRONIZADO','ERRO_DE_SINCRONIZACAO','CONFLITO'));
+alter table public.projects add constraint projects_sync_status_check check (sync_status in ('SALVO_LOCALMENTE','AGUARDANDO_SINCRONIZACAO','SINCRONIZANDO','SINCRONIZADO','ERRO_DE_SINCRONIZACAO','CONFLITO'));
+alter table public.environments add constraint environments_sync_status_check check (sync_status in ('SALVO_LOCALMENTE','AGUARDANDO_SINCRONIZACAO','SINCRONIZANDO','SINCRONIZADO','ERRO_DE_SINCRONIZACAO','CONFLITO'));
+alter table public.photos add constraint photos_sync_status_check check (sync_status in ('SALVO_LOCALMENTE','AGUARDANDO_SINCRONIZACAO','SINCRONIZANDO','SINCRONIZADO','ERRO_DE_SINCRONIZACAO','CONFLITO'));
+alter table public.annotations add constraint annotations_sync_status_check check (sync_status in ('SALVO_LOCALMENTE','AGUARDANDO_SINCRONIZACAO','SINCRONIZANDO','SINCRONIZADO','ERRO_DE_SINCRONIZACAO','CONFLITO'));
+alter table public.floor_plans add constraint floor_plans_sync_status_check check (sync_status in ('SALVO_LOCALMENTE','AGUARDANDO_SINCRONIZACAO','SINCRONIZANDO','SINCRONIZADO','ERRO_DE_SINCRONIZACAO','CONFLITO'));
+
 create index clients_org_idx on public.clients(organization_id, updated_at);
 create index projects_org_idx on public.projects(organization_id, updated_at);
 create index environments_project_idx on public.environments(project_id, updated_at);

@@ -14,6 +14,7 @@
 - Bloqueios: nenhuma credencial impede desenvolvimento; três imagens de referência citadas no pacote não foram encontradas.
 - Decisões: IndexedDB/Dexie local, D1 para registros, R2 privado para mídias, adaptadores de fornecedor.
 - Supabase: pasta, migração PostgreSQL, buckets privados, RLS e adaptador configurável preparados. Aplicação remota aguarda autorização/login em um projeto Supabase.
+- Versão móvel: contrato offline-first registrado em `docs/OFFLINE_FIRST_NATIVE.md`. APK/AAB ficam bloqueados até os testes de persistência, conflito, migração e restauração passarem.
 - Próxima ação: publicar a versão, validar migrações e executar teste manual assim que um navegador integrado estiver disponível.
 
 ## Testes de aceitação bloqueantes
