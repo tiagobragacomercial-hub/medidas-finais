@@ -17,6 +17,7 @@
 - Versão móvel: contrato offline-first registrado em `docs/OFFLINE_FIRST_NATIVE.md`. APK/AAB ficam bloqueados até os testes de persistência, conflito, migração e restauração passarem.
 - Arquitetura definitiva aprovada: SQLite + Supabase + Supabase Storage + backup criptografado no Google Drive; R2 será adotado posteriormente por migração verificada se o volume de arquivos justificar. Detalhes em `docs/ARQUITETURA_DEFINITIVA.md`.
 - Identidade visual: arte oficial aplicada sem alteração em `public/app-icon.png` (web/PWA/aba) e `assets/icon.png` (futura compilação móvel).
+- Pré-APK: definições confirmadas, recursos necessários e bloqueios de produto/loja registrados em `docs/PRE_APK.md`. Nenhum identificador permanente será inventado ou compilado sem confirmação.
 - Próxima ação: publicar a versão, validar migrações e executar teste manual assim que um navegador integrado estiver disponível.
 
 ## Testes de aceitação bloqueantes
