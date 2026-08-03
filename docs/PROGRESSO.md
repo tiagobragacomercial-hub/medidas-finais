@@ -44,6 +44,8 @@
 - Primeiro uso simplificado: botão principal orienta primeiro cadastro de cliente e depois projeto; criação de ambiente/projeto permanece desabilitada enquanto faltar a dependência necessária.
 - Criação de medida: após o primeiro ponto, foto e planta exibem linha provisória e os dois extremos acompanhando o ponteiro. O valor numérico é solicitado somente depois do segundo ponto e continua exclusivamente manual.
 - Verificação após prévia: lint, tipos web/móvel, 11 testes unitários, 4 de integração, build e 6 E2E aprovados.
+- Processamento automático de traços: ao soltar o gesto, retas são alinhadas (inclusive horizontal/vertical quando próximas do eixo); curvas são suavizadas e preservadas; mudanças de direção não coerentes são identificadas como traço misto. A classificação aparece na planta e no PDF, sem gerar dimensões.
+- Verificação após retificação/curvas: lint, tipos web/móvel, 13 testes unitários, 4 de integração, build e 6 E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

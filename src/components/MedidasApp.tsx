@@ -43,7 +43,13 @@ import {
   technicalCategories,
   toolConfig,
 } from "../features/annotations/catalog";
-import { rectifyPath, wallCode } from "../features/floor-plan/geometry";
+import {
+  classifyStroke,
+  processFreehandStroke,
+  rectifyPath,
+  strokePath,
+  wallCode,
+} from "../features/floor-plan/geometry";
 import { httpSyncTransport, syncPending } from "../features/sync/processor";
 import { getSupabase } from "../database/remote/supabase";
 type Section =
@@ -1695,6 +1701,18 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         items.map((item) => item.id === selected.id ? { ...item, point: p } : item),
       );
   }
+  function finishCanvasGesture() {
+    if (drawingStroke)
+      setStrokes((items) =>
+        items
+          .map((stroke, index) =>
+            index === items.length - 1 ? processFreehandStroke(stroke) : stroke,
+          )
+          .filter((stroke) => stroke.length > 1),
+      );
+    setDragging(false);
+    setDrawingStroke(false);
+  }
   function removeSelected() {
     if (!selected || confirmed) return;
     if (selected.kind === "point")
@@ -1737,8 +1755,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               aria-label="Planta baixa vetorial"
               style={{ touchAction: "none" }}
               onPointerMove={moveSelected}
-              onPointerUp={() => { setDragging(false); setDrawingStroke(false); }}
-              onPointerCancel={() => { setDragging(false); setDrawingStroke(false); }}
+              onPointerUp={finishCanvasGesture}
+              onPointerCancel={finishCanvasGesture}
               onPointerLeave={() => { if (!drawingStroke) setDragging(false); }}
               onPointerDown={add}
             >
@@ -1746,8 +1764,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 const middle = stroke[Math.floor(stroke.length / 2)];
                 return (
                   <g key={`stroke-${strokeIndex}`}>
-                    <polyline
-                      points={stroke.map((point) => `${point.x * 1000},${point.y * 600}`).join(" ")}
+                    <path
+                      d={strokePath(stroke)}
                       fill="none"
                       stroke="#163b59"
                       strokeWidth="9"
@@ -1762,7 +1780,12 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         fill="#075da9"
                         pointerEvents="none"
                       >
-                        Traço {wallCode(strokeIndex)}
+                        {classifyStroke(stroke) === "straight"
+                          ? "Reta"
+                          : classifyStroke(stroke) === "curve"
+                            ? "Curva"
+                            : "Misto"}{" "}
+                        {wallCode(strokeIndex)}
                       </text>
                     )}
                   </g>
@@ -2620,7 +2643,12 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
         if (middle) {
           d.setFontSize(8);
           d.setTextColor(7, 93, 169);
-          d.text(`Traço ${wallCode(strokeIndex)}`, box.x + middle.x * box.w, box.y + middle.y * box.h - 2);
+          const kind = classifyStroke(stroke) === "straight"
+            ? "Reta"
+            : classifyStroke(stroke) === "curve"
+              ? "Curva"
+              : "Misto";
+          d.text(`${kind} ${wallCode(strokeIndex)}`, box.x + middle.x * box.w, box.y + middle.y * box.h - 2);
         }
       });
       plan.elements.forEach((element) => {

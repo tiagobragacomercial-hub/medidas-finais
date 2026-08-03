@@ -124,3 +124,15 @@ test("medida mostra prévia entre os pontos e solicita o número por último", a
   const measurementInsertPosition = app.indexOf("setMeasurements((items)", promptPosition);
   assert.ok(promptPosition >= 0 && measurementInsertPosition > promptPosition);
 });
+
+test("traço livre é classificado e retificado ao terminar o gesto", async () => {
+  const [app, geometry] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/floor-plan/geometry.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(app, /finishCanvasGesture/);
+  assert.match(app, /processFreehandStroke\(stroke\)/);
+  assert.match(app, /classifyStroke\(stroke\)/);
+  assert.match(geometry, /"straight" \| "curve" \| "mixed"/);
+  assert.match(geometry, /function perpendicularDistance/);
+});
