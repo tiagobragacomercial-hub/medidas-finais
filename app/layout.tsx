@@ -9,6 +9,11 @@ export const metadata: Metadata = {
   description:
     "Levantamentos técnicos organizados, seguros e disponíveis offline.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/app-icon.png", type: "image/png", sizes: "1254x1254" }],
+    shortcut: [{ url: "/app-icon.png", type: "image/png" }],
+    apple: [{ url: "/app-icon.png", type: "image/png", sizes: "1254x1254" }],
+  },
 };
 
 export const viewport: Viewport = {

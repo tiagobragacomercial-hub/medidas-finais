@@ -1,1 +1,19 @@
-{"name":"Medidas Finais para Produção","short_name":"Medidas Finais","start_url":"/","display":"standalone","background_color":"#f5f8fb","theme_color":"#092c4c","description":"Levantamentos técnicos offline-first","icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml"}]}
+{
+  "name": "Medidas Finais para Produção",
+  "short_name": "Medidas Finais",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#10151b",
+  "theme_color": "#092c4c",
+  "description": "Levantamentos técnicos offline-first",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
