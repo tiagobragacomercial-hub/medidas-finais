@@ -1127,6 +1127,7 @@ function Editor({
                         setSelected(a.id);
                         setPhotoDrag({ annotationId: a.id, target });
                       }}
+                      showHandles={tool === "select"}
                     />
                   ))}
               </>
@@ -1271,11 +1272,13 @@ function Measure({
   selected,
   click,
   startDrag,
+  showHandles,
 }: {
   a: Annotation;
   selected: boolean;
   click: () => void;
   startDrag: (target: "start" | "end" | "label") => void;
+  showHandles: boolean;
 }) {
   if (a.type === "technical" || a.type === "detail" || a.type === "text") {
     const p = a.points[0];
@@ -1316,6 +1319,7 @@ function Measure({
             selected={selected}
             click={click}
             startDrag={startDrag}
+            showHandles={showHandles}
           />
         ))}
       </>
@@ -1349,20 +1353,19 @@ function Measure({
     <>
       <div
         className="measure"
-        onClick={click}
-        data-annotation-control
         style={{
           left: `${p1.x * 100}%`,
           top: `${p1.y * 100}%`,
           width: `${len}%`,
           transform: `rotate(${ang}deg)`,
           height: selected ? 5 : 3,
-          pointerEvents: "auto",
+          pointerEvents: "none",
         }}
       />
       <button
         className="point-marker text"
         data-annotation-control
+        onClick={click}
         onPointerDown={(event) => {
           event.stopPropagation();
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -1372,7 +1375,7 @@ function Measure({
       >
         {a.value || "?"}
       </button>
-      {selected &&
+      {selected && showHandles &&
         [p1, p2].map((point, index) => (
           <button
             key={index}
@@ -1681,9 +1684,15 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       strokeWidth="9"
                       strokeLinecap="round"
                       strokeLinejoin="round"
+                      pointerEvents="none"
                     />
                     {middle && stroke.length > 1 && (
-                      <text x={middle.x * 1000} y={middle.y * 600 - 12} fill="#075da9">
+                      <text
+                        x={middle.x * 1000}
+                        y={middle.y * 600 - 12}
+                        fill="#075da9"
+                        pointerEvents="none"
+                      >
                         Traço {wallCode(strokeIndex)}
                       </text>
                     )}
@@ -1709,16 +1718,6 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     key={measurement.id}
                     role="button"
                     aria-label={`Cota ${measurement.value || "sem valor"}`}
-                    onPointerDown={(event) => {
-                      event.stopPropagation();
-                      if (!confirmed) {
-                        setSelected({
-                          kind: "measurement",
-                          id: measurement.id,
-                        });
-                        setDragPart("label");
-                      }
-                    }}
                   >
                     <line
                       x1={x1}
@@ -1728,6 +1727,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       stroke={selectedMeasurement ? "#f59e0b" : "#d12f2f"}
                       strokeWidth={selectedMeasurement ? 6 : 4}
                       strokeDasharray="12 7"
+                      pointerEvents="none"
                     />
                     {[{ x: x1, y: y1, part: "start" as const }, { x: x2, y: y2, part: "end" as const }].map((handle) => (
                       <circle
@@ -1736,6 +1736,9 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         cy={handle.y}
                         r={selectedMeasurement ? 12 : 7}
                         fill="#d12f2f"
+                        pointerEvents={
+                          selectedMeasurement && mode !== "measure" ? "auto" : "none"
+                        }
                         onPointerDown={(event) => {
                           event.stopPropagation();
                           if (confirmed) return;
@@ -1759,8 +1762,10 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         if (confirmed) return;
                         setSelected({ kind: "measurement", id: measurement.id });
                         setDragPart("label");
-                        setDragging(true);
-                        event.currentTarget.setPointerCapture(event.pointerId);
+                        if (selectedMeasurement) {
+                          setDragging(true);
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                        }
                       }}
                     />
                     <text
@@ -1818,7 +1823,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   strokeWidth="4"
                 />
               )}
-              {!confirmed && strokes.flatMap((stroke, strokeIndex) => {
+              {!confirmed && mode === "wall" && strokes.flatMap((stroke, strokeIndex) => {
                 const indexes = stroke.length > 1 ? [0, stroke.length - 1] : [];
                 return indexes.map((pointIndex) => {
                   const point = stroke[pointIndex];

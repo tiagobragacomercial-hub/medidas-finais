@@ -37,6 +37,8 @@
 - Vídeo por ambiente: importação local de MP4, MOV e WebM adicionada ao editor web, com dimensões, duração, tipo MIME, reprodução com controles, fila de upload e preservação do arquivo local. Vídeos ficam separados das fotografias editáveis e nunca são fonte de medidas.
 - Portal/publicação recebe os metadados do vídeo e o PDF registra a lista de vídeos anexados sem tentar transformar o vídeo em imagem. Supabase atualizado pela migração `20260803183000_environment_videos.sql`.
 - Verificação após vídeo: lint, tipos web/móvel, 9 testes unitários, 4 de integração, build e 6 E2E aprovados.
+- Isolamento de marcações: linhas e traços visuais não capturam mais o ponteiro. Uma medida só é selecionada pela etiqueta central; alças aparecem apenas após seleção/modo de edição e ficam inativas durante a criação de outra medida. É possível iniciar exatamente no ponto final de outra medida ou parede.
+- Verificação após isolamento: lint, tipos web/móvel, 10 testes unitários, 4 de integração, build e 6 E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

@@ -99,3 +99,15 @@ test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () 
   assert.match(app, /mediaType === "video"/);
   assert.match(app, /<video/);
 });
+
+test("traços não bloqueiam o início de outra medida", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /showHandles=\{tool === "select"\}/);
+  assert.match(app, /pointerEvents: "none"/);
+  assert.match(app, /pointerEvents="none"/);
+  assert.match(app, /selectedMeasurement && mode !== "measure"/);
+  assert.match(app, /mode === "wall" && strokes\.flatMap/);
+});
