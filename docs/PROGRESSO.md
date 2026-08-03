@@ -13,7 +13,7 @@
 - Teste manual: pendente. O navegador integrado não estava disponível nesta sessão; nenhuma fase foi aprovada com base apenas nos testes de rota.
 - Bloqueios: nenhuma credencial impede desenvolvimento; três imagens de referência citadas no pacote não foram encontradas.
 - Decisões: IndexedDB/Dexie local, D1 para registros, R2 privado para mídias, adaptadores de fornecedor.
-- Supabase: pasta, migração PostgreSQL, buckets privados, RLS e adaptador configurável preparados. Aplicação remota aguarda autorização/login em um projeto Supabase.
+- Supabase: projeto `cvokxgqbteiuawxewgox` vinculado, migração aplicada, Auth validado, acesso anônimo bloqueado e buckets privados confirmados. Cutover do aplicativo aguarda usuário proprietário, testes autenticados de RLS e transporte offline-first completo.
 - Versão móvel: contrato offline-first registrado em `docs/OFFLINE_FIRST_NATIVE.md`. APK/AAB ficam bloqueados até os testes de persistência, conflito, migração e restauração passarem.
 - Arquitetura definitiva aprovada: SQLite + Supabase + Supabase Storage + backup criptografado no Google Drive; R2 será adotado posteriormente por migração verificada se o volume de arquivos justificar. Detalhes em `docs/ARQUITETURA_DEFINITIVA.md`.
 - Identidade visual: arte oficial aplicada sem alteração em `public/app-icon.png` (web/PWA/aba) e `assets/icon.png` (futura compilação móvel).

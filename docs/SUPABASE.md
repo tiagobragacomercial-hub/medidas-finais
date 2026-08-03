@@ -1,6 +1,17 @@
 # Supabase
 
-Estrutura preparada para a futura versão online/nativa do Medidas Finais.
+Estrutura remota vinculada para a futura versão online/nativa do Medidas Finais.
+
+## Projeto vinculado
+
+- Project Ref: `cvokxgqbteiuawxewgox`
+- URL: `https://cvokxgqbteiuawxewgox.supabase.co`
+- Migração `20260803021500_medidas_finais_core.sql`: aplicada e registrada remotamente.
+- Auth Health: aprovado (`HTTP 200`).
+- Acesso anônimo às tabelas internas: bloqueado (`HTTP 401`).
+- Buckets `project-media` e `publication-files`: criados e privados.
+- Chave pública local: configurada em `.env.local`, que permanece ignorado pelo Git.
+- Chaves administrativas: não foram gravadas no repositório.
 
 ## Conteúdo
 
@@ -13,13 +24,13 @@ Estrutura preparada para a futura versão online/nativa do Medidas Finais.
 - Buckets privados `project-media` e `publication-files`.
 - RLS em todas as tabelas operacionais; usuário anônimo não lê dados internos.
 
-## Ativação
+## Ativação do aplicativo
 
-1. Vincular este diretório a um projeto Supabase autorizado.
-2. Aplicar as migrações com a CLI do Supabase.
-3. Configurar `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-4. Manter `SUPABASE_SERVICE_ROLE_KEY` somente no servidor; nunca no aplicativo.
-5. Criar a primeira organização e associar o usuário proprietário.
-6. Executar os testes de RLS, upload privado e sincronização antes de habilitar o adaptador.
+1. Criar o primeiro usuário proprietário pelo fluxo de autenticação.
+2. Criar a primeira organização e associar esse usuário como `owner`.
+3. Implementar o transporte SQLite/Dexie → Supabase sem acesso direto das telas.
+4. Executar testes autenticados de RLS para todos os papéis.
+5. Executar upload, checksum, conflito, repetição e restauração em ambiente de teste.
+6. Configurar as variáveis no ambiente de hospedagem sem enviar segredos ao cliente.
 
-Até essas etapas serem concluídas com credenciais válidas, o adaptador não substitui o backend atual e não coloca dados existentes em risco.
+Até essas etapas serem concluídas, o Supabase está provisionado e protegido, mas ainda não substitui o backend D1/R2 da versão web publicada. Essa separação evita migração prematura e perda dos dados existentes.
