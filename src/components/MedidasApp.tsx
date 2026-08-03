@@ -9,6 +9,7 @@ import type {
   FloorPlanElement,
   FloorPlanMeasurement,
   FloorPlanRecord,
+  FloorPlanText,
   Photo,
   Project,
 } from "../types/models";
@@ -757,7 +758,11 @@ function Editor({
     [draftPoints, setDraftPoints] = useState<Array<{ x: number; y: number }>>(
       [],
     ),
-    [selected, setSelected] = useState("");
+    [selected, setSelected] = useState(""),
+    [photoDrag, setPhotoDrag] = useState<{
+      annotationId: string;
+      target: "start" | "end" | "label";
+    } | null>(null);
   const file = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -793,6 +798,7 @@ function Editor({
     im.src = url;
   }
   async function draw(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest("[data-annotation-control]")) return;
     if (!isAnnotationTool(tool) || !photo) return;
     const r = canvas.current!.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
@@ -866,6 +872,30 @@ function Editor({
     setDraftPoints([]);
     setTool("select");
     notify(`${config.label} salva e protegida`);
+  }
+  async function movePhotoAnnotation(e: React.PointerEvent<HTMLDivElement>) {
+    if (!photoDrag || !canvas.current) return;
+    const point = normalizePointer(e.clientX, e.clientY, canvas.current.getBoundingClientRect());
+    const annotation = await db.annotations.get(photoDrag.annotationId);
+    if (!annotation) return;
+    if (photoDrag.target === "label")
+      await db.annotations.update(annotation.id, { labelPoint: point, updatedAt: now() });
+    else {
+      const index = photoDrag.target === "start" ? 0 : annotation.points.length - 1;
+      await db.annotations.update(annotation.id, {
+        points: annotation.points.map((item, itemIndex) => itemIndex === index ? point : item),
+        updatedAt: now(),
+      });
+    }
+  }
+  async function finishPhotoDrag() {
+    if (!photoDrag) return;
+    const annotation = await db.annotations.get(photoDrag.annotationId);
+    if (annotation)
+      await db.annotations.update(annotation.id, { version: annotation.version + 1, updatedAt: now() });
+    await queue("annotation", photoDrag.annotationId, "update");
+    setPhotoDrag(null);
+    notify("Posição salva neste dispositivo");
   }
   async function edit(a: Annotation) {
     const snapshot = structuredClone(a);
@@ -1019,6 +1049,9 @@ function Editor({
             ref={canvas}
             className="canvas"
             onPointerDown={draw}
+            onPointerMove={movePhotoAnnotation}
+            onPointerUp={finishPhotoDrag}
+            onPointerCancel={finishPhotoDrag}
             style={
               photo ? { aspectRatio: `${photo.width}/${photo.height}` } : {}
             }
@@ -1035,6 +1068,10 @@ function Editor({
                       a={a}
                       selected={a.id === selected}
                       click={() => setSelected(a.id)}
+                      startDrag={(target) => {
+                        setSelected(a.id);
+                        setPhotoDrag({ annotationId: a.id, target });
+                      }}
                     />
                   ))}
               </>
@@ -1156,10 +1193,12 @@ function Measure({
   a,
   selected,
   click,
+  startDrag,
 }: {
   a: Annotation;
   selected: boolean;
   click: () => void;
+  startDrag: (target: "start" | "end" | "label") => void;
 }) {
   if (a.type === "technical" || a.type === "detail" || a.type === "text") {
     const p = a.points[0];
@@ -1167,7 +1206,16 @@ function Measure({
       <button
         className={`point-marker ${a.type} ${selected ? "selected" : ""}`}
         onClick={click}
-        style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          startDrag("label");
+        }}
+        data-annotation-control
+        style={{
+          left: `${(a.labelPoint?.x ?? p.x) * 100}%`,
+          top: `${(a.labelPoint?.y ?? p.y) * 100}%`,
+        }}
         aria-label={`${a.code} ${a.description}`}
       >
         <strong>{a.code}</strong>
@@ -1185,10 +1233,12 @@ function Measure({
               ...a,
               type: "linear",
               points: [a.points[i], a.points[i + 1]],
+              labelPoint: undefined,
               value: i === 0 ? a.value : a.secondaryValue || "?",
             }}
             selected={selected}
             click={click}
+            startDrag={startDrag}
           />
         ))}
       </>
@@ -1213,22 +1263,64 @@ function Measure({
     dx = (p2.x - p1.x) * 100,
     dy = (p2.y - p1.y) * 100,
     len = Math.hypot(dx, dy),
-    ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+    ang = (Math.atan2(dy, dx) * 180) / Math.PI,
+    label = a.labelPoint || {
+      x: (p1.x + p2.x) / 2,
+      y: (p1.y + p2.y) / 2,
+    };
   return (
-    <div
-      className="measure"
-      onClick={click}
-      style={{
-        left: `${p1.x * 100}%`,
-        top: `${p1.y * 100}%`,
-        width: `${len}%`,
-        transform: `rotate(${ang}deg)`,
-        height: selected ? 5 : 3,
-        pointerEvents: "auto",
-      }}
-    >
-      <span>{a.value || "?"}</span>
-    </div>
+    <>
+      <div
+        className="measure"
+        onClick={click}
+        data-annotation-control
+        style={{
+          left: `${p1.x * 100}%`,
+          top: `${p1.y * 100}%`,
+          width: `${len}%`,
+          transform: `rotate(${ang}deg)`,
+          height: selected ? 5 : 3,
+          pointerEvents: "auto",
+        }}
+      />
+      <button
+        className="point-marker text"
+        data-annotation-control
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          startDrag("label");
+        }}
+        style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
+      >
+        {a.value || "?"}
+      </button>
+      {selected &&
+        [p1, p2].map((point, index) => (
+          <button
+            key={index}
+            aria-label={index ? "Mover ponto final" : "Mover ponto inicial"}
+            data-annotation-control
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              startDrag(index ? "end" : "start");
+            }}
+            style={{
+              position: "absolute",
+              left: `${point.x * 100}%`,
+              top: `${point.y * 100}%`,
+              width: 18,
+              height: 18,
+              borderRadius: "50%",
+              background: "#0876db",
+              border: "3px solid white",
+              transform: "translate(-50%, -50%)",
+              zIndex: 8,
+            }}
+          />
+        ))}
+    </>
   );
 }
 function FloorPlan({
@@ -1268,10 +1360,11 @@ function FloorPlan({
 function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
     [mode, setMode] = useState<
-      "wall" | "door" | "window" | "camera" | "measure"
+      "wall" | "door" | "window" | "camera" | "measure" | "text"
     >("wall"),
     [elements, setElements] = useState<FloorPlanElement[]>([]),
     [measurements, setMeasurements] = useState<FloorPlanMeasurement[]>([]),
+    [texts, setTexts] = useState<FloorPlanText[]>([]),
     [measurementStart, setMeasurementStart] = useState<{
       x: number;
       y: number;
@@ -1282,9 +1375,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       | { kind: "point"; index: number }
       | { kind: "element"; id: string }
       | { kind: "measurement"; id: string }
+      | { kind: "text"; id: string }
       | null
     >(null),
-    [dragging, setDragging] = useState(false);
+    [dragging, setDragging] = useState(false),
+    [dragPart, setDragPart] = useState<
+      "item" | "start" | "end" | "label"
+    >("item");
   const plan = useLiveQuery<FloorPlanRecord | undefined>(
     () =>
       environment
@@ -1317,6 +1414,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     setPoints(plan?.points || []);
     setElements(plan?.elements || []);
     setMeasurements(plan?.measurements || []);
+    setTexts(plan?.texts || []);
     setConfirmed(plan?.confirmed || false);
     setHydratedEnvironment(environment.id);
   }, [environment, plan, hydratedEnvironment]);
@@ -1336,6 +1434,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           points,
           elements,
           measurements,
+          texts,
           confirmed,
           version: (existing?.version || 0) + 1,
           createdAt: existing?.createdAt || timestamp,
@@ -1349,6 +1448,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     points,
     elements,
     measurements,
+    texts,
     confirmed,
     environment,
     hydratedEnvironment,
@@ -1375,6 +1475,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         setSelected({ kind: "measurement", id });
         setMeasurementStart(null);
       }
+    } else if (mode === "text") {
+      const value = prompt("Digite o texto que ficará na planta:", "")?.trim();
+      if (value) {
+        const id = uid();
+        setTexts((items) => [...items, { id, value, point: p }]);
+        setSelected({ kind: "text", id });
+      }
     } else setElements((v) => [...v, { id: uid(), type: mode, ...p }]);
   }
   function pointerPosition(e: React.PointerEvent<SVGSVGElement>) {
@@ -1397,6 +1504,19 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           item.id === selected.id ? { ...item, ...p } : item,
         ),
       );
+    else if (selected.kind === "measurement")
+      setMeasurements((items) =>
+        items.map((item) => {
+          if (item.id !== selected.id) return item;
+          if (dragPart === "start") return { ...item, start: p };
+          if (dragPart === "end") return { ...item, end: p };
+          return { ...item, labelPoint: p };
+        }),
+      );
+    else if (selected.kind === "text")
+      setTexts((items) =>
+        items.map((item) => item.id === selected.id ? { ...item, point: p } : item),
+      );
   }
   function removeSelected() {
     if (!selected || confirmed) return;
@@ -1404,10 +1524,11 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       setPoints((items) => items.filter((_, i) => i !== selected.index));
     else if (selected.kind === "element")
       setElements((items) => items.filter((item) => item.id !== selected.id));
-    else
+    else if (selected.kind === "measurement")
       setMeasurements((items) =>
         items.filter((item) => item.id !== selected.id),
       );
+    else setTexts((items) => items.filter((item) => item.id !== selected.id));
     setSelected(null);
   }
   return (
@@ -1464,7 +1585,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   x1 = measurement.start.x * 1000,
                   y1 = measurement.start.y * 600,
                   x2 = measurement.end.x * 1000,
-                  y2 = measurement.end.y * 600;
+                  y2 = measurement.end.y * 600,
+                  labelPoint = measurement.labelPoint || {
+                    x: (measurement.start.x + measurement.end.x) / 2,
+                    y: (measurement.start.y + measurement.end.y) / 2,
+                  },
+                  labelX = labelPoint.x * 1000,
+                  labelY = labelPoint.y * 600;
                 return (
                   <g
                     key={measurement.id}
@@ -1472,11 +1599,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     aria-label={`Cota ${measurement.value || "sem valor"}`}
                     onPointerDown={(event) => {
                       event.stopPropagation();
-                      if (!confirmed)
+                      if (!confirmed) {
                         setSelected({
                           kind: "measurement",
                           id: measurement.id,
                         });
+                        setDragPart("label");
+                      }
                     }}
                   >
                     <line
@@ -1488,20 +1617,43 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       strokeWidth={selectedMeasurement ? 6 : 4}
                       strokeDasharray="12 7"
                     />
-                    <circle cx={x1} cy={y1} r="7" fill="#d12f2f" />
-                    <circle cx={x2} cy={y2} r="7" fill="#d12f2f" />
+                    {[{ x: x1, y: y1, part: "start" as const }, { x: x2, y: y2, part: "end" as const }].map((handle) => (
+                      <circle
+                        key={handle.part}
+                        cx={handle.x}
+                        cy={handle.y}
+                        r={selectedMeasurement ? 12 : 7}
+                        fill="#d12f2f"
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          if (confirmed) return;
+                          setSelected({ kind: "measurement", id: measurement.id });
+                          setDragPart(handle.part);
+                          setDragging(true);
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                        }}
+                      />
+                    ))}
                     <rect
-                      x={(x1 + x2) / 2 - 48}
-                      y={(y1 + y2) / 2 - 22}
+                      x={labelX - 48}
+                      y={labelY - 22}
                       width="96"
                       height="28"
                       rx="6"
                       fill="#fff"
                       stroke="#d12f2f"
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        if (confirmed) return;
+                        setSelected({ kind: "measurement", id: measurement.id });
+                        setDragPart("label");
+                        setDragging(true);
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
                     />
                     <text
-                      x={(x1 + x2) / 2}
-                      y={(y1 + y2) / 2 - 3}
+                      x={labelX}
+                      y={labelY - 3}
                       textAnchor="middle"
                       fill="#9f1f1f"
                       fontWeight="700"
@@ -1514,6 +1666,36 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   </g>
                 );
               })}
+              {texts.map((item) => (
+                <g
+                  key={item.id}
+                  role="button"
+                  aria-label={`Texto ${item.value}`}
+                  transform={`translate(${item.point.x * 1000} ${item.point.y * 600})`}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    if (confirmed) return;
+                    setSelected({ kind: "text", id: item.id });
+                    setDragPart("item");
+                    setDragging(true);
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  }}
+                >
+                  <rect
+                    x="-8"
+                    y="-24"
+                    width={Math.max(70, item.value.length * 10)}
+                    height="34"
+                    rx="6"
+                    fill="#fff"
+                    stroke={selected?.kind === "text" && selected.id === item.id ? "#f59e0b" : "#163b59"}
+                    strokeWidth="3"
+                  />
+                  <text x="4" y="0" fill="#172534" fontWeight="700" style={{ pointerEvents: "none" }}>
+                    {item.value}
+                  </text>
+                </g>
+              ))}
               {measurementStart && (
                 <circle
                   cx={measurementStart.x * 1000}
@@ -1594,7 +1776,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         <aside className="card aside">
           <h2>Ferramentas da planta</h2>
           <div className="actions" style={{ flexWrap: "wrap" }}>
-            {(["wall", "door", "window", "camera", "measure"] as const).map(
+            {(["wall", "door", "window", "camera", "measure", "text"] as const).map(
               (x) => (
                 <button
                   key={x}
@@ -1604,7 +1786,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     setMeasurementStart(null);
                   }}
                 >
-                  {x === "measure" ? "medida" : x}
+                  {x === "measure" ? "medida" : x === "text" ? "texto" : x}
                 </button>
               ),
             )}
@@ -1614,6 +1796,11 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               {measurementStart
                 ? "Marque o segundo ponto da cota."
                 : "Marque dois pontos e depois digite a medida real."}
+            </p>
+          )}
+          {mode === "text" && (
+            <p className="subtitle">
+              Clique na planta, digite o texto e depois arraste-o para qualquer posição.
             </p>
           )}
           <button
@@ -1693,6 +1880,23 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               <small>O sistema nunca calcula ou preenche este valor.</small>
             </label>
           )}
+          {selected?.kind === "text" && (
+            <label className="field">
+              <span>Texto livre da planta</span>
+              <input
+                disabled={confirmed}
+                value={texts.find((item) => item.id === selected.id)?.value || ""}
+                onChange={(event) =>
+                  setTexts((items) =>
+                    items.map((item) =>
+                      item.id === selected.id ? { ...item, value: event.target.value } : item,
+                    ),
+                  )
+                }
+              />
+              <small>Arraste o texto diretamente na planta para reposicioná-lo.</small>
+            </label>
+          )}
           {selected?.kind === "element" &&
             elements.find((item) => item.id === selected.id)?.type ===
               "camera" && (
@@ -1736,6 +1940,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               setPoints([]);
               setElements([]);
               setMeasurements([]);
+              setTexts([]);
               setMeasurementStart(null);
               setConfirmed(false);
             }}
@@ -1744,7 +1949,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           </button>
           <p className="subtitle">
             {points.length > 1
-              ? `${points.length - 1} paredes · ${elements.length} elementos · ${measurements.length} medidas informadas manualmente`
+              ? `${points.length - 1} paredes · ${elements.length} elementos · ${measurements.length} medidas manuais · ${texts.length} textos`
               : "Aguardando o primeiro traço"}
           </p>
         </aside>
@@ -2209,16 +2414,25 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
         d.circle(x1, y1, 1, "F");
         d.circle(x2, y2, 1, "F");
         if (measurement.value) {
+          const labelPoint = measurement.labelPoint || {
+            x: (measurement.start.x + measurement.end.x) / 2,
+            y: (measurement.start.y + measurement.end.y) / 2,
+          };
           d.setFillColor(255, 255, 255);
           d.setTextColor(155, 25, 25);
           d.setFontSize(8);
           d.text(
             `${measurement.value} ${measurement.unit}`,
-            (x1 + x2) / 2,
-            (y1 + y2) / 2 - 2,
+            box.x + labelPoint.x * box.w,
+            box.y + labelPoint.y * box.h,
             { align: "center" },
           );
         }
+      });
+      (plan.texts || []).forEach((item) => {
+        d.setTextColor(23, 37, 52);
+        d.setFontSize(9);
+        d.text(item.value, box.x + item.point.x * box.w, box.y + item.point.y * box.h);
       });
     }
     footer();
@@ -2248,6 +2462,20 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
       annotations
         .filter((annotation) => annotation.state !== "hidden")
         .forEach((annotation) => {
+          if (
+            (annotation.type === "text" || annotation.type === "technical" || annotation.type === "detail") &&
+            annotation.points[0]
+          ) {
+            const point = annotation.labelPoint || annotation.points[0];
+            d.setTextColor(23, 37, 52);
+            d.setFontSize(8);
+            d.text(
+              annotation.type === "text" ? annotation.value : annotation.description,
+              x + point.x * width,
+              y + point.y * height,
+            );
+            return;
+          }
           if (annotation.points.length > 1) {
             const [start, end] = annotation.points;
             d.setDrawColor(230, 47, 47);
@@ -2259,13 +2487,17 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
               y + end.y * height,
             );
             if (annotation.value) {
+              const labelPoint = annotation.labelPoint || {
+                x: (start.x + end.x) / 2,
+                y: (start.y + end.y) / 2,
+              };
               d.setFillColor(255, 255, 255);
               d.setTextColor(170, 20, 20);
               d.setFontSize(8);
               d.text(
                 `${annotation.code}: ${annotation.value}`,
-                x + ((start.x + end.x) / 2) * width,
-                y + ((start.y + end.y) / 2) * height - 2,
+                x + labelPoint.x * width,
+                y + labelPoint.y * height,
                 { align: "center" },
               );
             }

@@ -54,6 +54,14 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
         end: { x: 0.8, y: 0.15 },
         value: "3200",
         unit: "mm",
+        labelPoint: { x: 0.55, y: 0.24 },
+      },
+    ],
+    texts: [
+      {
+        id: uid(),
+        value: "PONTO DE ÁGUA",
+        point: { x: 0.62, y: 0.4 },
       },
     ],
     confirmed: true,
@@ -71,6 +79,9 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
   assert.equal(plan?.points.length, 3);
   assert.equal(plan?.elements[0].type, "door");
   assert.equal(plan?.measurements?.[0].value, "3200");
+  assert.deepEqual(plan?.measurements?.[0].labelPoint, { x: 0.55, y: 0.24 });
+  assert.equal(plan?.texts?.[0].value, "PONTO DE ÁGUA");
+  assert.deepEqual(plan?.texts?.[0].point, { x: 0.62, y: 0.4 });
   await db.delete();
 });
 test("sync só confirma após aceite e preserva a cópia local", async () => {

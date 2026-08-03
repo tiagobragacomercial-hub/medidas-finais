@@ -51,6 +51,7 @@ export interface Annotation {
   code: string;
   state: "protected" | "editing" | "hidden";
   points: Point[];
+  labelPoint?: Point;
   value: string;
   secondaryValue?: string;
   textPosition: "between" | "above" | "below" | "left" | "right" | "free";
@@ -115,6 +116,12 @@ export interface FloorPlanMeasurement {
   end: Point;
   value: string;
   unit: "mm" | "cm" | "m";
+  labelPoint?: Point;
+}
+export interface FloorPlanText {
+  id: string;
+  value: string;
+  point: Point;
 }
 export interface FloorPlanRecord {
   id: string;
@@ -122,6 +129,7 @@ export interface FloorPlanRecord {
   points: Point[];
   elements: FloorPlanElement[];
   measurements?: FloorPlanMeasurement[];
+  texts?: FloorPlanText[];
   confirmed: boolean;
   version: number;
   createdAt: string;

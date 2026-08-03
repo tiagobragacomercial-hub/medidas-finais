@@ -28,6 +28,9 @@
 - Aplicativo móvel iniciado em `mobile/` com Expo SDK 57 e TypeScript. SQLite WAL, migração numerada, identificador do dispositivo, clientes, projetos e fila idempotente são gravados localmente em transações.
 - Móvel: autenticação Supabase usa armazenamento seguro; painel permite criar cliente/projeto offline, reabrir dados locais, visualizar pendências e sair da conta. Nenhuma tela móvel grava diretamente na nuvem.
 - Validação móvel: TypeScript aprovado, Expo Doctor 20/20 e bundle Android de produção gerado com sucesso. APK instalável bloqueado externamente: SDK Android não existe neste computador, EAS não está autenticado e o identificador Android permanente ainda precisa de aprovação.
+- Referência em vídeo de 03/08/2026 analisada integralmente (1min51s). Editor de fotos agora permite reposicionar manualmente ponto inicial, ponto final e etiqueta da medida; textos livres também podem ser arrastados para qualquer posição.
+- Planta baixa agora possui ferramenta de texto livre, edição e arraste; pontos e etiqueta de cada cota manual podem ser movidos independentemente. Posições persistem localmente, entram no PDF/PNG e possuem colunas aditivas no Supabase pela migração `20260803154500_free_position_measurements_and_texts.sql`.
+- Verificação após comportamento de cotas/textos: lint, tipos web/móvel, 7 testes unitários, 3 de integração, build e 6 E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

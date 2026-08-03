@@ -60,3 +60,17 @@ test("navegação e seleção operacional possuem ações reais", async () => {
   assert.match(app, /selectProject=\{setSelectedProjectId\}/);
   assert.doesNotMatch(app, /function FloorPlanLegacy/);
 });
+
+test("medidas e textos possuem posicionamento manual independente", async () => {
+  const [app, models, exporter] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/types/models.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/photos/export-png.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(models, /labelPoint\?: Point/);
+  assert.match(models, /interface FloorPlanText/);
+  assert.match(app, /Mover ponto inicial/);
+  assert.match(app, /Mover ponto final/);
+  assert.match(app, /Digite o texto que ficará na planta/);
+  assert.match(exporter, /a\.labelPoint \|\|/);
+});
