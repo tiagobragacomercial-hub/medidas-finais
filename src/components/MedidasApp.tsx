@@ -39,6 +39,7 @@ import {
   technicalCategories,
   toolConfig,
 } from "../features/annotations/catalog";
+import { rectifyPath, wallCode } from "../features/floor-plan/geometry";
 type Section =
   | "dashboard"
   | "clients"
@@ -1093,6 +1094,130 @@ function Measure({
   );
 }
 function FloorPlan() {
+  return <InteractiveFloorPlan />;
+}
+function InteractiveFloorPlan() {
+  const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
+    [mode, setMode] = useState<"wall" | "door" | "window" | "camera">("wall"),
+    [elements, setElements] = useState<
+      Array<{ id: string; type: string; x: number; y: number }>
+    >([]),
+    [confirmed, setConfirmed] = useState(false);
+  function add(e: React.PointerEvent<HTMLDivElement>) {
+    if (confirmed) return;
+    const r = e.currentTarget.getBoundingClientRect(),
+      p = normalizePointer(e.clientX, e.clientY, r);
+    if (mode === "wall") setPoints((v) => [...v, p]);
+    else setElements((v) => [...v, { id: uid(), type: mode, ...p }]);
+  }
+  return (
+    <>
+      <Head
+        eye="Planta baixa"
+        title="Desenho do ambiente"
+        sub="Desenhe a geometria real; o sistema organiza traços, mas não cria medidas."
+      />
+      <div className="grid">
+        <section className="card wide">
+          <div className="floorplan" onPointerDown={add}>
+            <svg viewBox="0 0 1000 600" aria-label="Planta baixa vetorial">
+              {points.slice(1).map((p, i) => (
+                <g key={i}>
+                  <line
+                    x1={points[i].x * 1000}
+                    y1={points[i].y * 600}
+                    x2={p.x * 1000}
+                    y2={p.y * 600}
+                    stroke="#163b59"
+                    strokeWidth="9"
+                  />
+                  <text
+                    x={(points[i].x + p.x) * 500}
+                    y={(points[i].y + p.y) * 300 - 12}
+                    fill="#075da9"
+                  >
+                    Parede {wallCode(i)}
+                  </text>
+                </g>
+              ))}
+              {points.map((p, i) => (
+                <circle
+                  key={`p${i}`}
+                  cx={p.x * 1000}
+                  cy={p.y * 600}
+                  r="10"
+                  fill="#0876db"
+                />
+              ))}
+              {elements.map((el) => (
+                <g
+                  key={el.id}
+                  transform={`translate(${el.x * 1000} ${el.y * 600})`}
+                >
+                  <circle
+                    r="18"
+                    fill={el.type === "camera" ? "#7a3fe0" : "#fff"}
+                    stroke="#0876db"
+                    strokeWidth="4"
+                  />
+                  <text x="25" y="6">
+                    {el.type}
+                  </text>
+                </g>
+              ))}
+            </svg>
+            {!points.length && (
+              <div className="emptycanvas">
+                <p>Toque ou clique para iniciar o contorno livre.</p>
+              </div>
+            )}
+          </div>
+        </section>
+        <aside className="card aside">
+          <h2>Ferramentas da planta</h2>
+          <div className="actions" style={{ flexWrap: "wrap" }}>
+            {(["wall", "door", "window", "camera"] as const).map((x) => (
+              <button
+                key={x}
+                className={`btn ${mode === x ? "primary" : ""}`}
+                onClick={() => setMode(x)}
+              >
+                {x}
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn"
+            onClick={() => setPoints(rectifyPath(points))}
+          >
+            Prévia de linhas retas
+          </button>
+          <button className="btn" onClick={() => setConfirmed((v) => !v)}>
+            {confirmed ? "Editar novamente" : "Confirmar planta"}
+          </button>
+          <button
+            className="btn danger"
+            onClick={() => {
+              setPoints([]);
+              setElements([]);
+              setConfirmed(false);
+            }}
+          >
+            Limpar rascunho
+          </button>
+          <p className="subtitle">
+            {points.length > 1
+              ? `${points.length - 1} paredes · ${elements.length} elementos · nenhuma medida criada`
+              : "Aguardando o primeiro traço"}
+          </p>
+        </aside>
+      </div>
+    </>
+  );
+}
+// Mantido temporariamente durante a migração visual; será removido quando a planta persistente substituir todos os estados.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function FloorPlanLegacy() {
   return (
     <>
       <Head

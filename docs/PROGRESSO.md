@@ -8,3 +8,9 @@
 - Bloqueios: nenhuma credencial impede desenvolvimento; três imagens de referência citadas no pacote não foram encontradas.
 - Decisões: IndexedDB/Dexie local, D1 para registros, R2 privado para mídias, adaptadores de fornecedor.
 - Próxima ação: integrar a geometria vetorial persistente ao editor de planta.
+
+## Referência visual de 131 telas
+
+- PDF integral lido e amostras de dashboard, editor, planta, PDF e portal revisadas visualmente.
+- Matriz de cobertura registrada em `docs/TELAS_E_ESTADOS.md`.
+- A conclusão das fases passa a exigir também a cobertura dos estados e adaptações desktop/celular correspondentes.

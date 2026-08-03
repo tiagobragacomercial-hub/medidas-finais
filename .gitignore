@@ -39,6 +39,8 @@ yarn-error.log*
 next-env.d.ts
 *.tsbuildinfo
 /.openai/*.log
+/.openai/*.tar.gz
+/tmp/
 /dist/
 /.wrangler/
 /outputs/
