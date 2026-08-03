@@ -1359,6 +1359,7 @@ function FloorPlan({
 }
 function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
+    [strokes, setStrokes] = useState<Array<Array<{ x: number; y: number }>>>([]),
     [mode, setMode] = useState<
       "wall" | "door" | "window" | "camera" | "measure" | "text"
     >("wall"),
@@ -1372,13 +1373,14 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     [confirmed, setConfirmed] = useState(false),
     [hydratedEnvironment, setHydratedEnvironment] = useState(""),
     [selected, setSelected] = useState<
-      | { kind: "point"; index: number }
+      | { kind: "point"; strokeIndex: number; index: number }
       | { kind: "element"; id: string }
       | { kind: "measurement"; id: string }
       | { kind: "text"; id: string }
       | null
     >(null),
     [dragging, setDragging] = useState(false),
+    [drawingStroke, setDrawingStroke] = useState(false),
     [dragPart, setDragPart] = useState<
       "item" | "start" | "end" | "label"
     >("item");
@@ -1412,6 +1414,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     )
       return;
     setPoints(plan?.points || []);
+    setStrokes(
+      plan?.strokes?.length
+        ? plan.strokes
+        : plan?.points?.length
+          ? [plan.points]
+          : [],
+    );
     setElements(plan?.elements || []);
     setMeasurements(plan?.measurements || []);
     setTexts(plan?.texts || []);
@@ -1431,7 +1440,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         await db.floorPlans.put({
           id,
           environmentId: environment.id,
-          points,
+          points: strokes[0] || points,
+          strokes,
           elements,
           measurements,
           texts,
@@ -1446,6 +1456,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     return () => clearTimeout(timer);
   }, [
     points,
+    strokes,
     elements,
     measurements,
     texts,
@@ -1453,11 +1464,15 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     environment,
     hydratedEnvironment,
   ]);
-  function add(e: React.PointerEvent<HTMLDivElement>) {
+  function add(e: React.PointerEvent<SVGSVGElement>) {
     if (confirmed || !environment || e.target !== e.currentTarget) return;
     const r = e.currentTarget.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
-    if (mode === "wall") setPoints((v) => [...v, p]);
+    if (mode === "wall") {
+      setStrokes((items) => [...items, [p]]);
+      setDrawingStroke(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
     else if (mode === "measure") {
       if (!measurementStart) setMeasurementStart(p);
       else {
@@ -1492,11 +1507,24 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     );
   }
   function moveSelected(e: React.PointerEvent<SVGSVGElement>) {
-    if (!dragging || !selected || confirmed) return;
     const p = pointerPosition(e);
+    if (drawingStroke && mode === "wall" && !confirmed) {
+      setStrokes((items) => {
+        const next = [...items], current = [...(next[next.length - 1] || [])], last = current[current.length - 1];
+        if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 0.008) current.push(p);
+        next[next.length - 1] = current;
+        return next;
+      });
+      return;
+    }
+    if (!dragging || !selected || confirmed) return;
     if (selected.kind === "point")
-      setPoints((items) =>
-        items.map((item, index) => (index === selected.index ? p : item)),
+      setStrokes((items) =>
+        items.map((stroke, strokeIndex) =>
+          strokeIndex === selected.strokeIndex
+            ? stroke.map((item, index) => (index === selected.index ? p : item))
+            : stroke,
+        ),
       );
     else if (selected.kind === "element")
       setElements((items) =>
@@ -1521,7 +1549,15 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   function removeSelected() {
     if (!selected || confirmed) return;
     if (selected.kind === "point")
-      setPoints((items) => items.filter((_, i) => i !== selected.index));
+      setStrokes((items) =>
+        items
+          .map((stroke, strokeIndex) =>
+            strokeIndex === selected.strokeIndex
+              ? stroke.filter((_, index) => index !== selected.index)
+              : stroke,
+          )
+          .filter((stroke) => stroke.length > 1),
+      );
     else if (selected.kind === "element")
       setElements((items) => items.filter((item) => item.id !== selected.id));
     else if (selected.kind === "measurement")
@@ -1546,38 +1582,37 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       )}
       <div className="grid">
         <section className="card wide">
-          <div className="floorplan" onPointerDown={add}>
+          <div className="floorplan">
             <svg
               viewBox="0 0 1000 600"
               aria-label="Planta baixa vetorial"
+              style={{ touchAction: "none" }}
               onPointerMove={moveSelected}
-              onPointerUp={() => setDragging(false)}
-              onPointerCancel={() => setDragging(false)}
-              onPointerLeave={() => setDragging(false)}
-              onPointerDown={(e) => {
-                if (e.target === e.currentTarget)
-                  add(e as unknown as React.PointerEvent<HTMLDivElement>);
-              }}
+              onPointerUp={() => { setDragging(false); setDrawingStroke(false); }}
+              onPointerCancel={() => { setDragging(false); setDrawingStroke(false); }}
+              onPointerLeave={() => { if (!drawingStroke) setDragging(false); }}
+              onPointerDown={add}
             >
-              {points.slice(1).map((p, i) => (
-                <g key={i}>
-                  <line
-                    x1={points[i].x * 1000}
-                    y1={points[i].y * 600}
-                    x2={p.x * 1000}
-                    y2={p.y * 600}
-                    stroke="#163b59"
-                    strokeWidth="9"
-                  />
-                  <text
-                    x={(points[i].x + p.x) * 500}
-                    y={(points[i].y + p.y) * 300 - 12}
-                    fill="#075da9"
-                  >
-                    Parede {wallCode(i)}
-                  </text>
-                </g>
-              ))}
+              {strokes.map((stroke, strokeIndex) => {
+                const middle = stroke[Math.floor(stroke.length / 2)];
+                return (
+                  <g key={`stroke-${strokeIndex}`}>
+                    <polyline
+                      points={stroke.map((point) => `${point.x * 1000},${point.y * 600}`).join(" ")}
+                      fill="none"
+                      stroke="#163b59"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    {middle && stroke.length > 1 && (
+                      <text x={middle.x * 1000} y={middle.y * 600 - 12} fill="#075da9">
+                        Traço {wallCode(strokeIndex)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
               {measurements.map((measurement) => {
                 const selectedMeasurement =
                     selected?.kind === "measurement" &&
@@ -1706,28 +1741,28 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   strokeWidth="4"
                 />
               )}
-              {points.map((p, i) => (
-                <circle
-                  key={`p${i}`}
-                  cx={p.x * 1000}
-                  cy={p.y * 600}
-                  r={
-                    selected?.kind === "point" && selected.index === i ? 16 : 10
-                  }
-                  fill={
-                    selected?.kind === "point" && selected.index === i
-                      ? "#f59e0b"
-                      : "#0876db"
-                  }
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    if (confirmed) return;
-                    setSelected({ kind: "point", index: i });
-                    setDragging(true);
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                  }}
-                />
-              ))}
+              {!confirmed && strokes.flatMap((stroke, strokeIndex) => {
+                const indexes = stroke.length > 1 ? [0, stroke.length - 1] : [];
+                return indexes.map((pointIndex) => {
+                  const point = stroke[pointIndex];
+                  const isSelected = selected?.kind === "point" && selected.strokeIndex === strokeIndex && selected.index === pointIndex;
+                  return (
+                    <circle
+                      key={`p-${strokeIndex}-${pointIndex}`}
+                      cx={point.x * 1000}
+                      cy={point.y * 600}
+                      r={isSelected ? 16 : 9}
+                      fill={isSelected ? "#f59e0b" : "#0876db"}
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        setSelected({ kind: "point", strokeIndex, index: pointIndex });
+                        setDragging(true);
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
+                    />
+                  );
+                });
+              })}
               {elements.map((el) => (
                 <g
                   key={el.id}
@@ -1740,24 +1775,26 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     e.currentTarget.setPointerCapture(e.pointerId);
                   }}
                 >
-                  <circle
-                    r="18"
-                    fill={el.type === "camera" ? "#7a3fe0" : "#fff"}
-                    stroke={
-                      selected?.kind === "element" && selected.id === el.id
-                        ? "#f59e0b"
-                        : "#0876db"
-                    }
-                    strokeWidth="4"
-                  />
-                  {el.type === "door" && (
-                    <path
-                      d="M 0 0 L 38 0 A 38 38 0 0 1 0 38"
-                      fill="none"
-                      stroke="#0876db"
+                  {el.type === "camera" && (
+                    <circle
+                      r="18"
+                      fill="#7a3fe0"
+                      stroke={selected?.kind === "element" && selected.id === el.id ? "#f59e0b" : "#0876db"}
                       strokeWidth="4"
-                      transform={`rotate(${el.direction || 0})`}
                     />
+                  )}
+                  {el.type === "door" && (
+                    <g transform={`rotate(${el.direction || 0})`}>
+                      <circle r="5" fill="#0876db" />
+                      <line x1="0" y1="0" x2="48" y2="0" stroke="#163b59" strokeWidth="6" />
+                      <path d="M 0 48 A 48 48 0 0 0 48 0" fill="none" stroke="#0876db" strokeWidth="3" />
+                    </g>
+                  )}
+                  {el.type === "window" && (
+                    <g transform={`rotate(${el.direction || 0})`}>
+                      <rect x="-34" y="-10" width="68" height="20" fill="#fff" stroke="#163b59" strokeWidth="5" />
+                      <line x1="-30" y1="0" x2="30" y2="0" stroke="#60aee8" strokeWidth="4" />
+                    </g>
                   )}
                   <text x="25" y="6" style={{ pointerEvents: "none" }}>
                     {el.type}
@@ -1766,7 +1803,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 </g>
               ))}
             </svg>
-            {!points.length && (
+            {!strokes.length && (
               <div className="emptycanvas">
                 <p>Toque ou clique para iniciar o contorno livre.</p>
               </div>
@@ -1786,11 +1823,16 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     setMeasurementStart(null);
                   }}
                 >
-                  {x === "measure" ? "medida" : x === "text" ? "texto" : x}
+                  {x === "wall" ? "mão livre" : x === "measure" ? "medida" : x === "text" ? "texto" : x}
                 </button>
               ),
             )}
           </div>
+          {mode === "wall" && (
+            <p className="subtitle">
+              Pressione e arraste o dedo, mouse ou caneta para desenhar cada parede à mão livre.
+            </p>
+          )}
           {mode === "measure" && (
             <p className="subtitle">
               {measurementStart
@@ -1805,9 +1847,10 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           )}
           <button
             className="btn"
-            onClick={() => setPoints(rectifyPath(points))}
+            disabled={!strokes.length || confirmed}
+            onClick={() => setStrokes((items) => items.map((stroke) => rectifyPath(stroke)))}
           >
-            Prévia de linhas retas
+            Retificar traços
           </button>
           <button
             className="btn"
@@ -1826,8 +1869,9 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               </p>
             )}
           {selected?.kind === "element" &&
-            elements.find((item) => item.id === selected.id)?.type ===
-              "door" && (
+            ["door", "window"].includes(
+              elements.find((item) => item.id === selected.id)?.type || "",
+            ) && (
               <button
                 className="btn"
                 disabled={confirmed}
@@ -1844,7 +1888,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   )
                 }
               >
-                Girar abertura da porta
+                Girar porta ou janela
               </button>
             )}
           {selected?.kind === "measurement" && (
@@ -1938,6 +1982,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             className="btn danger"
             onClick={() => {
               setPoints([]);
+              setStrokes([]);
               setElements([]);
               setMeasurements([]);
               setTexts([]);
@@ -1948,8 +1993,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             Limpar rascunho
           </button>
           <p className="subtitle">
-            {points.length > 1
-              ? `${points.length - 1} paredes · ${elements.length} elementos · ${measurements.length} medidas manuais · ${texts.length} textos`
+            {strokes.length
+              ? `${strokes.length} traços · ${elements.length} elementos · ${measurements.length} medidas manuais · ${texts.length} textos`
               : "Aguardando o primeiro traço"}
           </p>
         </aside>
@@ -2375,21 +2420,23 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
       const box = { x: 24, y: 40, w: 240, h: 132 };
       d.setLineWidth(1.2);
       d.setDrawColor(22, 59, 89);
-      plan.points.slice(1).forEach((point, index) => {
-        const previous = plan.points[index];
-        d.line(
-          box.x + previous.x * box.w,
-          box.y + previous.y * box.h,
-          box.x + point.x * box.w,
-          box.y + point.y * box.h,
-        );
-        d.setFontSize(8);
-        d.setTextColor(7, 93, 169);
-        d.text(
-          `Parede ${wallCode(index)}`,
-          box.x + ((previous.x + point.x) / 2) * box.w,
-          box.y + ((previous.y + point.y) / 2) * box.h - 2,
-        );
+      const drawingStrokes = plan.strokes?.length ? plan.strokes : [plan.points];
+      drawingStrokes.forEach((stroke, strokeIndex) => {
+        stroke.slice(1).forEach((point, index) => {
+          const previous = stroke[index];
+          d.line(
+            box.x + previous.x * box.w,
+            box.y + previous.y * box.h,
+            box.x + point.x * box.w,
+            box.y + point.y * box.h,
+          );
+        });
+        const middle = stroke[Math.floor(stroke.length / 2)];
+        if (middle) {
+          d.setFontSize(8);
+          d.setTextColor(7, 93, 169);
+          d.text(`Traço ${wallCode(strokeIndex)}`, box.x + middle.x * box.w, box.y + middle.y * box.h - 2);
+        }
       });
       plan.elements.forEach((element) => {
         const x = box.x + element.x * box.w,

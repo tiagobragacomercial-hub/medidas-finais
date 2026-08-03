@@ -74,3 +74,16 @@ test("medidas e textos possuem posicionamento manual independente", async () => 
   assert.match(app, /Digite o texto que ficará na planta/);
   assert.match(exporter, /a\.labelPoint \|\|/);
 });
+
+test("planta aceita traços contínuos e componentes de porta e janela", async () => {
+  const [app, models] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/types/models.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(models, /strokes\?: Point\[\]\[\]/);
+  assert.match(app, /setDrawingStroke\(true\)/);
+  assert.match(app, /strokeLinecap="round"/);
+  assert.match(app, /Retificar traços/);
+  assert.match(app, /A 48 48/);
+  assert.match(app, /el\.type === "window"/);
+});

@@ -31,6 +31,9 @@
 - Referência em vídeo de 03/08/2026 analisada integralmente (1min51s). Editor de fotos agora permite reposicionar manualmente ponto inicial, ponto final e etiqueta da medida; textos livres também podem ser arrastados para qualquer posição.
 - Planta baixa agora possui ferramenta de texto livre, edição e arraste; pontos e etiqueta de cada cota manual podem ser movidos independentemente. Posições persistem localmente, entram no PDF/PNG e possuem colunas aditivas no Supabase pela migração `20260803154500_free_position_measurements_and_texts.sql`.
 - Verificação após comportamento de cotas/textos: lint, tipos web/móvel, 7 testes unitários, 3 de integração, build e 6 E2E aprovados.
+- Quatro vídeos de referência de planta analisados focando exclusivamente o gesto. Planta web alterada para múltiplos traços contínuos à mão livre por toque/mouse/caneta, com retificação opcional, preservação de plantas antigas e persistência no Supabase pela migração `20260803170000_floor_plan_freehand_strokes.sql`.
+- Componentes de planta: porta pronta com folha e arco de abertura; janela pronta com representação própria. Ambos podem ser inseridos, arrastados, girados e excluídos sem usar imagens fixas dos vídeos.
+- Verificação após desenho livre: lint, tipos web/móvel, 8 testes unitários, 3 de integração, build e 6 E2E aprovados.
 
 ## Testes de aceitação bloqueantes
 

@@ -127,6 +127,7 @@ export interface FloorPlanRecord {
   id: string;
   environmentId: string;
   points: Point[];
+  strokes?: Point[][];
   elements: FloorPlanElement[];
   measurements?: FloorPlanMeasurement[];
   texts?: FloorPlanText[];

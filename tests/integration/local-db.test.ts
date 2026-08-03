@@ -46,6 +46,17 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
       { x: 0.8, y: 0.1 },
       { x: 0.8, y: 0.7 },
     ],
+    strokes: [
+      [
+        { x: 0.1, y: 0.1 },
+        { x: 0.35, y: 0.12 },
+        { x: 0.8, y: 0.1 },
+      ],
+      [
+        { x: 0.8, y: 0.1 },
+        { x: 0.8, y: 0.7 },
+      ],
+    ],
     elements: [{ id: uid(), type: "door", x: 0.5, y: 0.1 }],
     measurements: [
       {
@@ -77,6 +88,8 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
     .first();
   assert.equal(plan?.confirmed, true);
   assert.equal(plan?.points.length, 3);
+  assert.equal(plan?.strokes?.length, 2);
+  assert.equal(plan?.strokes?.[0].length, 3);
   assert.equal(plan?.elements[0].type, "door");
   assert.equal(plan?.measurements?.[0].value, "3200");
   assert.deepEqual(plan?.measurements?.[0].labelPoint, { x: 0.55, y: 0.24 });
