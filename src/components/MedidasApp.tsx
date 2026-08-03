@@ -33,6 +33,12 @@ import { jsPDF } from "jspdf";
 import { exportAnnotatedPng } from "../features/photos/export-png";
 import { normalizePointer } from "../features/annotations/geometry";
 import { measurementValueSchema } from "../schemas/entities";
+import {
+  isAnnotationTool,
+  nextCode,
+  technicalCategories,
+  toolConfig,
+} from "../features/annotations/catalog";
 type Section =
   | "dashboard"
   | "clients"
@@ -647,7 +653,9 @@ function Editor({
         [photoId],
       ) || [],
     [tool, setTool] = useState("select"),
-    [start, setStart] = useState<{ x: number; y: number } | null>(null),
+    [draftPoints, setDraftPoints] = useState<Array<{ x: number; y: number }>>(
+      [],
+    ),
     [selected, setSelected] = useState("");
   const file = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
@@ -679,36 +687,79 @@ function Editor({
     im.src = url;
   }
   async function draw(e: React.PointerEvent) {
-    if (tool !== "linear" || !photo) return;
+    if (!isAnnotationTool(tool) || !photo) return;
     const r = canvas.current!.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
-    if (!start) return setStart(p);
-    const value = prompt("Informe a medida (somente número):", "");
-    if (value === null) return setStart(null);
-    const parsed = measurementValueSchema.safeParse(value.trim());
-    if (!parsed.success) {
-      notify("Informe somente o número da medida");
-      return setStart(null);
+    const points = [...draftPoints, p],
+      config = toolConfig[tool];
+    if (points.length < config.points) {
+      setDraftPoints(points);
+      notify(`Ponto ${points.length} registrado`);
+      return;
     }
+    let value = "",
+      secondaryValue: string | undefined,
+      description = "";
+    if (tool === "text") {
+      value = prompt("Digite o texto:", "") ?? "";
+      if (!value) return setDraftPoints([]);
+    } else if (tool === "detail")
+      description = prompt("Descrição da foto de detalhe:", "") ?? "";
+    else if (tool === "point") {
+      description =
+        prompt(
+          `Categoria: ${technicalCategories.join(", ")}`,
+          technicalCategories[0],
+        ) ?? "";
+      value = prompt("Valor informado (opcional):", "") ?? "";
+    } else {
+      value =
+        prompt(
+          tool === "angle"
+            ? "Informe o ângulo confirmado:"
+            : "Informe a medida (somente número):",
+          "",
+        ) ?? "";
+      const parsed = measurementValueSchema.safeParse(value.trim());
+      if (!parsed.success) {
+        notify("Informe somente o número da medida");
+        return setDraftPoints([]);
+      }
+      value = parsed.data;
+      if (tool === "l") {
+        const second = prompt("Informe a segunda medida:", "") ?? "",
+          parsedSecond = measurementValueSchema.safeParse(second.trim());
+        if (!parsedSecond.success) {
+          notify("Segunda medida inválida");
+          return setDraftPoints([]);
+        }
+        secondaryValue = parsedSecond.data;
+      }
+    }
+    const finalPoints =
+      tool === "l"
+        ? [points[0], { x: points[1].x, y: points[0].y }, points[1]]
+        : points;
     const id = uid();
     await db.annotations.put({
       id,
       photoId: photo.id,
-      type: "linear",
-      code: `M${String(anns.length + 1).padStart(2, "0")}`,
+      type: config.type,
+      code: nextCode(tool, anns),
       state: "protected",
-      points: [start, p],
-      value: parsed.data,
+      points: finalPoints,
+      value,
+      secondaryValue,
       textPosition: "above",
-      description: "",
+      description,
       layer: anns.length + 1,
       version: 1,
       updatedAt: now(),
     });
     await queue("annotation", id, "create");
-    setStart(null);
+    setDraftPoints([]);
     setTool("select");
-    notify("Medida salva e protegida");
+    notify(`${config.label} salva e protegida`);
   }
   async function edit(a: Annotation) {
     const snapshot = structuredClone(a);
@@ -736,6 +787,40 @@ function Editor({
     await db.annotations.update(a.id, {
       value: parsed.data,
       state: "protected",
+      version: a.version + 1,
+      updatedAt: now(),
+    });
+    await queue("annotation", a.id, "update");
+  }
+  async function duplicate(a: Annotation) {
+    const id = uid(),
+      copy = {
+        ...structuredClone(a),
+        id,
+        code: `${a.code}-C`,
+        points: a.points.map((p) => ({
+          x: Math.min(1, p.x + 0.02),
+          y: Math.min(1, p.y + 0.02),
+        })),
+        state: "protected" as const,
+        layer: Math.max(0, ...anns.map((x) => x.layer)) + 1,
+        version: 1,
+        updatedAt: now(),
+      };
+    await db.annotations.put(copy);
+    await queue("annotation", id, "create");
+    notify("Marcação duplicada e protegida");
+  }
+  async function toggleHidden(a: Annotation) {
+    await db.annotations.update(a.id, {
+      state: a.state === "hidden" ? "protected" : "hidden",
+      updatedAt: now(),
+    });
+    await queue("annotation", a.id, "update");
+  }
+  async function moveLayer(a: Annotation, direction: number) {
+    await db.annotations.update(a.id, {
+      layer: Math.max(0, a.layer + direction),
       version: a.version + 1,
       updatedAt: now(),
     });
@@ -804,6 +889,7 @@ function Editor({
                 <img src={url} alt={photo.name} />
                 {anns
                   .filter((a) => a.state !== "hidden")
+                  .sort((a, b) => a.layer - b.layer)
                   .map((a) => (
                     <Measure
                       key={a.id}
@@ -880,11 +966,27 @@ function Editor({
                   </select>
                   <button
                     className="btn danger"
-                    onClick={() =>
-                      db.annotations.update(a.id, { state: "hidden" })
-                    }
+                    onClick={() => toggleHidden(a)}
                   >
                     <Trash2 size={13} />
+                    {a.state === "hidden" ? "Restaurar" : "Ocultar"}
+                  </button>
+                  <button className="btn" onClick={() => duplicate(a)}>
+                    Duplicar
+                  </button>
+                  <button
+                    className="btn"
+                    aria-label="Trazer para frente"
+                    onClick={() => moveLayer(a, 1)}
+                  >
+                    Camada +
+                  </button>
+                  <button
+                    className="btn"
+                    aria-label="Enviar para trás"
+                    onClick={() => moveLayer(a, -1)}
+                  >
+                    Camada -
                   </button>
                 </div>
               )}
@@ -920,6 +1022,53 @@ function Measure({
   selected: boolean;
   click: () => void;
 }) {
+  if (a.type === "technical" || a.type === "detail" || a.type === "text") {
+    const p = a.points[0];
+    return (
+      <button
+        className={`point-marker ${a.type} ${selected ? "selected" : ""}`}
+        onClick={click}
+        style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+        aria-label={`${a.code} ${a.description}`}
+      >
+        <strong>{a.code}</strong>
+        <span>{a.type === "text" ? a.value : a.description}</span>
+      </button>
+    );
+  }
+  if (a.type === "l-shape" && a.points.length === 3) {
+    return (
+      <>
+        {[0, 1].map((i) => (
+          <Measure
+            key={i}
+            a={{
+              ...a,
+              type: "linear",
+              points: [a.points[i], a.points[i + 1]],
+              value: i === 0 ? a.value : a.secondaryValue || "?",
+            }}
+            selected={selected}
+            click={click}
+          />
+        ))}
+      </>
+    );
+  }
+  if (a.type === "angle" && a.points.length === 3) {
+    return (
+      <button
+        className="angle-marker"
+        onClick={click}
+        style={{
+          left: `${a.points[1].x * 100}%`,
+          top: `${a.points[1].y * 100}%`,
+        }}
+      >
+        {a.value}°
+      </button>
+    );
+  }
   if (a.points.length < 2) return null;
   const [p1, p2] = a.points,
     dx = (p2.x - p1.x) * 100,

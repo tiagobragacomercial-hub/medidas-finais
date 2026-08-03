@@ -437,6 +437,46 @@ button {
   border-color: var(--blue);
   background: var(--blue2);
 }
+.point-marker,
+.angle-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  border: 2px solid #e21f2f;
+  background: #fff;
+  color: #971522;
+  border-radius: 99px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 5px;
+}
+.point-marker span {
+  display: none;
+  position: absolute;
+  left: 38px;
+  top: 0;
+  white-space: nowrap;
+  background: #fff;
+  border: 1px solid #e21f2f;
+  border-radius: 6px;
+  padding: 4px;
+}
+.point-marker:hover span,
+.point-marker.selected span {
+  display: block;
+}
+.point-marker.detail {
+  border-color: #7a3fe0;
+  color: #6330c2;
+}
+.point-marker.text {
+  border-radius: 6px;
+}
+.angle-marker {
+  padding: 4px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
 .mobilebar {
   display: none;
 }
