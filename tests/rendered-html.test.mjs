@@ -46,3 +46,17 @@ test("exportação usa a foto original e omite elementos ocultos", async () => {
   assert.match(exporter, /state\s*!==\s*"hidden"/);
   assert.match(exporter, /image\/png/);
 });
+
+test("navegação e seleção operacional possuem ações reais", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /onClick=\{\(\) => setSection\("dashboard"\)\}/);
+  assert.match(app, /onClick=\{\(\) => setSection\("portal"\)\}/);
+  assert.match(app, /onClick=\{\(\) => setSection\("settings"\)\}/);
+  assert.match(app, /onClick=\{\(\) => open\(p\.id\)\}/);
+  assert.match(app, /selectEnvironment=\{setSelectedEnvironmentId\}/);
+  assert.match(app, /selectProject=\{setSelectedProjectId\}/);
+  assert.doesNotMatch(app, /function FloorPlanLegacy/);
+});

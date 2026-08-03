@@ -44,6 +44,7 @@ import {
 } from "../features/annotations/catalog";
 import { rectifyPath, wallCode } from "../features/floor-plan/geometry";
 import { httpSyncTransport, syncPending } from "../features/sync/processor";
+import { getSupabase } from "../database/remote/supabase";
 type Section =
   | "dashboard"
   | "clients"
@@ -52,7 +53,8 @@ type Section =
   | "floorplan"
   | "sync"
   | "voice"
-  | "portal";
+  | "portal"
+  | "settings";
 const types = [
   "Cozinha",
   "Sala",
@@ -71,6 +73,8 @@ const types = [
 ];
 export function MedidasApp() {
   const [section, setSection] = useState<Section>("dashboard"),
+    [selectedProjectId, setSelectedProjectId] = useState(""),
+    [selectedEnvironmentId, setSelectedEnvironmentId] = useState(""),
     [modal, setModal] = useState<null | "client" | "project" | "environment">(
       null,
     ),
@@ -88,6 +92,18 @@ export function MedidasApp() {
             .count(),
         [],
       ) || 0;
+  const selectedProjectEnvironments = selectedProjectId
+    ? envs.filter((environment) => environment.projectId === selectedProjectId)
+    : envs,
+    firstProjectId = projects[0]?.id;
+  useEffect(() => {
+    if (!selectedProjectId && firstProjectId) setSelectedProjectId(firstProjectId);
+  }, [firstProjectId, selectedProjectId]);
+  useEffect(() => {
+    const available = selectedProjectEnvironments;
+    if (!available.some((environment) => environment.id === selectedEnvironmentId))
+      setSelectedEnvironmentId(available[0]?.id || "");
+  }, [selectedEnvironmentId, selectedProjectEnvironments]);
   useEffect(() => {
     navigator.serviceWorker?.register("/sw.js").catch(() => {});
     let running = false;
@@ -116,9 +132,24 @@ export function MedidasApp() {
           <span>Medidas Finais</span>
         </div>
         <nav>
-          <button className="navbtn active">Operação</button>
-          <button className="navbtn">Publicações</button>
-          <button className="navbtn">Administração</button>
+          <button
+            className={`navbtn ${!['portal', 'settings'].includes(section) ? 'active' : ''}`}
+            onClick={() => setSection("dashboard")}
+          >
+            Operação
+          </button>
+          <button
+            className={`navbtn ${section === 'portal' ? 'active' : ''}`}
+            onClick={() => setSection("portal")}
+          >
+            Publicações
+          </button>
+          <button
+            className={`navbtn ${section === 'settings' ? 'active' : ''}`}
+            onClick={() => setSection("settings")}
+          >
+            Administração
+          </button>
         </nav>
         <div className="sync">
           <span className="dot" />
@@ -183,7 +214,12 @@ export function MedidasApp() {
             active={section === "portal"}
             click={() => setSection("portal")}
           />
-          <Side icon={<Settings />} label="Configurações" />
+          <Side
+            icon={<Settings />}
+            label="Configurações"
+            active={section === "settings"}
+            click={() => setSection("settings")}
+          />
         </aside>
         <main className="content">
           {section === "dashboard" && (
@@ -205,17 +241,42 @@ export function MedidasApp() {
               clients={clients}
               add={() => setModal("project")}
               addEnv={() => setModal("environment")}
+              open={(projectId) => {
+                setSelectedProjectId(projectId);
+                const environment = envs.find((item) => item.projectId === projectId);
+                setSelectedEnvironmentId(environment?.id || "");
+                setSection("editor");
+              }}
             />
           )}{" "}
           {section === "editor" && (
-            <Editor envs={envs} photos={photos} notify={setToast} />
+            <Editor
+              envs={selectedProjectEnvironments}
+              photos={photos}
+              environmentId={selectedEnvironmentId}
+              selectEnvironment={setSelectedEnvironmentId}
+              notify={setToast}
+            />
           )}{" "}
-          {section === "floorplan" && <FloorPlan envs={envs} />}{" "}
+          {section === "floorplan" && (
+            <FloorPlan
+              envs={selectedProjectEnvironments}
+              environmentId={selectedEnvironmentId}
+              selectEnvironment={setSelectedEnvironmentId}
+            />
+          )}{" "}
           {section === "sync" && <Sync pending={pending} />}{" "}
           {section === "voice" && (
             <VoiceAssistant go={setSection} openModal={setModal} />
           )}{" "}
-          {section === "portal" && <Portal projects={projects} />}
+          {section === "portal" && (
+            <Portal
+              projects={projects}
+              projectId={selectedProjectId}
+              selectProject={setSelectedProjectId}
+            />
+          )}
+          {section === "settings" && <SettingsPanel />}
         </main>
       </div>
       <div className="mobilebar">
@@ -440,11 +501,13 @@ function Projects({
   clients,
   add,
   addEnv,
+  open,
 }: {
   projects: Project[];
   clients: Client[];
   add: () => void;
   addEnv: () => void;
+  open: (projectId: string) => void;
 }) {
   return (
     <>
@@ -482,6 +545,7 @@ function Projects({
             <button
               className="btn"
               style={{ width: "100%", justifyContent: "center" }}
+              onClick={() => open(p.id)}
             >
               Abrir levantamento
             </button>
@@ -666,14 +730,21 @@ function Field({
 function Editor({
   envs,
   photos,
+  environmentId,
+  selectEnvironment,
   notify,
 }: {
   envs: Environment[];
   photos: Photo[];
+  environmentId: string;
+  selectEnvironment: (environmentId: string) => void;
   notify: (s: string) => void;
 }) {
-  const [photoId, setPhotoId] = useState(photos[0]?.id || ""),
-    photo = photos.find((p) => p.id === photoId),
+  const environmentPhotos = photos.filter(
+      (item) => item.environmentId === environmentId,
+    ),
+    [photoId, setPhotoId] = useState(""),
+    photo = environmentPhotos.find((p) => p.id === photoId),
     anns =
       useLiveQuery<Annotation[]>(
         () =>
@@ -690,18 +761,23 @@ function Editor({
   const file = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!photoId && photos[0]) setPhotoId(photos[0].id);
-  }, [photos, photoId]);
+    if (!environmentPhotos.some((item) => item.id === photoId))
+      setPhotoId(environmentPhotos[0]?.id || "");
+  }, [environmentPhotos, photoId]);
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (!f || !envs[0]) return;
+    const environment = envs.find((item) => item.id === environmentId);
+    if (!f || !environment) {
+      notify("Selecione ou crie um ambiente antes de importar a foto");
+      return;
+    }
     const im = new Image(),
       url = URL.createObjectURL(f);
     im.onload = async () => {
       const id = uid();
       await db.photos.put({
         id,
-        environmentId: envs[0].id,
+        environmentId: environment.id,
         name: f.name,
         blob: f,
         width: im.width,
@@ -885,6 +961,39 @@ function Editor({
           </>
         }
       />
+      <section className="card" style={{ marginBottom: 14 }}>
+        <div className="actions" style={{ alignItems: "end", flexWrap: "wrap" }}>
+          <label className="field" style={{ minWidth: 240 }}>
+            <span>Ambiente</span>
+            <select
+              value={environmentId}
+              onChange={(event) => selectEnvironment(event.target.value)}
+            >
+              <option value="">Selecione um ambiente</option>
+              {envs.map((environment) => (
+                <option key={environment.id} value={environment.id}>
+                  {environment.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field" style={{ minWidth: 240 }}>
+            <span>Fotografia</span>
+            <select
+              value={photoId}
+              disabled={!environmentPhotos.length}
+              onChange={(event) => setPhotoId(event.target.value)}
+            >
+              <option value="">Nenhuma fotografia</option>
+              {environmentPhotos.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
       <div className="workspace">
         <div className="tools">
           {[
@@ -1122,8 +1231,39 @@ function Measure({
     </div>
   );
 }
-function FloorPlan({ envs }: { envs: Environment[] }) {
-  return <InteractiveFloorPlan environment={envs[0]} />;
+function FloorPlan({
+  envs,
+  environmentId,
+  selectEnvironment,
+}: {
+  envs: Environment[];
+  environmentId: string;
+  selectEnvironment: (environmentId: string) => void;
+}) {
+  return (
+    <>
+      <section className="card" style={{ marginBottom: 14 }}>
+        <label className="field" style={{ maxWidth: 420 }}>
+          <span>Ambiente da planta</span>
+          <select
+            value={environmentId}
+            onChange={(event) => selectEnvironment(event.target.value)}
+          >
+            <option value="">Selecione um ambiente</option>
+            {envs.map((environment) => (
+              <option key={environment.id} value={environment.id}>
+                {environment.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+      <InteractiveFloorPlan
+        key={environmentId || "empty"}
+        environment={envs.find((item) => item.id === environmentId)}
+      />
+    </>
+  );
 }
 function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
@@ -1612,59 +1752,6 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     </>
   );
 }
-// Mantido temporariamente durante a migração visual; será removido quando a planta persistente substituir todos os estados.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function FloorPlanLegacy() {
-  return (
-    <>
-      <Head
-        eye="Planta baixa"
-        title="Desenho do ambiente"
-        sub="Paredes e aberturas vetoriais editáveis, sem inventar dimensões."
-      />
-      <div className="grid">
-        <section className="card wide">
-          <div className="floorplan">
-            <div
-              className="wall"
-              style={{ left: "18%", top: "20%", width: "55%" }}
-            />
-            <div
-              className="wall"
-              style={{
-                left: "73%",
-                top: "20%",
-                width: "50%",
-                transform: "rotate(90deg)",
-              }}
-            />
-            <div
-              className="wall"
-              style={{ left: "18%", top: "72%", width: "55%" }}
-            />
-            <div
-              className="wall"
-              style={{
-                left: "18%",
-                top: "20%",
-                width: "52%",
-                transform: "rotate(90deg)",
-              }}
-            />
-            <div className="door" style={{ left: "18%", top: "52%" }} />
-          </div>
-        </section>
-        <aside className="card aside">
-          <h2>Elementos</h2>
-          <p className="subtitle">
-            Parede · Porta · Janela · Vão · Coluna · Câmera
-          </p>
-          <button className="btn">Retificar traços</button>
-        </aside>
-      </div>
-    </>
-  );
-}
 type VoiceRecognition = {
   lang: string;
   interimResults: boolean;
@@ -1816,11 +1903,19 @@ function Sync({ pending }: { pending: number }) {
     </>
   );
 }
-function Portal({ projects }: { projects: Project[] }) {
+function Portal({
+  projects,
+  projectId,
+  selectProject,
+}: {
+  projects: Project[];
+  projectId: string;
+  selectProject: (projectId: string) => void;
+}) {
   const [qr, setQr] = useState(""),
     [access, setAccess] = useState<{ url: string; code: string } | null>(null),
     [publishing, setPublishing] = useState(false),
-    project = projects[0];
+    project = projects.find((item) => item.id === projectId);
   async function publish() {
     if (!project || publishing) return;
     setPublishing(true);
@@ -1889,6 +1984,26 @@ function Portal({ projects }: { projects: Project[] }) {
         title="Portal do cliente"
         sub="Somente a versão publicada pode ser visualizada ou baixada."
       />
+      <section className="card" style={{ marginBottom: 14 }}>
+        <label className="field" style={{ maxWidth: 520 }}>
+          <span>Projeto para publicação</span>
+          <select
+            value={projectId}
+            onChange={(event) => {
+              selectProject(event.target.value);
+              setAccess(null);
+              setQr("");
+            }}
+          >
+            <option value="">Selecione um projeto</option>
+            {projects.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
       <section className="portal-cover">
         <div className="eyebrow" style={{ color: "#8ecbff" }}>
           Pasta digital
@@ -1936,6 +2051,34 @@ function Portal({ projects }: { projects: Project[] }) {
           </button>
         </div>
       </div>
+    </>
+  );
+}
+
+function SettingsPanel() {
+  const [leaving, setLeaving] = useState(false);
+  async function signOut() {
+    if (leaving) return;
+    setLeaving(true);
+    await getSupabase().auth.signOut();
+    location.assign("/login");
+  }
+  return (
+    <>
+      <Head
+        eye="Administração"
+        title="Configurações"
+        sub="Sessão da proprietária e informações deste dispositivo."
+      />
+      <section className="card" style={{ maxWidth: 720 }}>
+        <h2>Conta conectada</h2>
+        <p className="subtitle">
+          Os dados operacionais continuam salvos localmente para uso sem internet.
+        </p>
+        <button className="btn danger" disabled={leaving} onClick={signOut}>
+          {leaving ? "Saindo…" : "Sair da conta"}
+        </button>
+      </section>
     </>
   );
 }

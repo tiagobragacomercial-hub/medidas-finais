@@ -23,6 +23,8 @@
 - Vercel: prévia de produção publicada em `https://medidas-finais-beryl.vercel.app`; variáveis públicas do Supabase cadastradas no ambiente de produção.
 - Autenticação: fluxo antigo exclusivo do ambiente ChatGPT removido da entrada principal. Login real da proprietária via Supabase implementado, com sessão persistente e proteção da rota `/admin`.
 - Verificação após correção do login: lint, TypeScript, 5 testes unitários, 3 testes de integração, build e 6 testes E2E aprovados.
+- Auditoria de controles: navegação superior, Configurações, Abrir levantamento, seleção de projeto/ambiente/foto, seleção da planta, seleção da publicação e saída da conta agora possuem ações reais. Componente legado com botão inativo removido.
+- Verificação após auditoria funcional: lint sem avisos, TypeScript, 6 testes unitários, 3 testes de integração, build e 6 testes E2E aprovados. Validação visual/manual em navegador continua pendente por indisponibilidade do navegador integrado.
 
 ## Testes de aceitação bloqueantes
 
