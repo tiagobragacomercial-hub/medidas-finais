@@ -12,6 +12,9 @@ Estrutura remota vinculada para a futura versão online/nativa do Medidas Finais
 - Buckets `project-media` e `publication-files`: criados e privados.
 - Chave pública local: configurada em `.env.local`, que permanece ignorado pelo Git.
 - Chaves administrativas: não foram gravadas no repositório.
+- Usuária proprietária: criada, e-mail confirmado e login validado.
+- Organização `Medidas Finais`: criada com uma associação `owner`.
+- RLS autenticado: a proprietária visualiza somente a organização autorizada.
 
 ## Conteúdo
 
@@ -26,11 +29,9 @@ Estrutura remota vinculada para a futura versão online/nativa do Medidas Finais
 
 ## Ativação do aplicativo
 
-1. Criar o primeiro usuário proprietário pelo fluxo de autenticação.
-2. Criar a primeira organização e associar esse usuário como `owner`.
-3. Implementar o transporte SQLite/Dexie → Supabase sem acesso direto das telas.
-4. Executar testes autenticados de RLS para todos os papéis.
-5. Executar upload, checksum, conflito, repetição e restauração em ambiente de teste.
-6. Configurar as variáveis no ambiente de hospedagem sem enviar segredos ao cliente.
+1. Implementar o transporte SQLite/Dexie → Supabase sem acesso direto das telas.
+2. Executar testes autenticados de RLS para os demais papéis.
+3. Executar upload, checksum, conflito, repetição e restauração em ambiente de teste.
+4. Configurar as variáveis no ambiente de hospedagem sem enviar segredos ao cliente.
 
 Até essas etapas serem concluídas, o Supabase está provisionado e protegido, mas ainda não substitui o backend D1/R2 da versão web publicada. Essa separação evita migração prematura e perda dos dados existentes.
