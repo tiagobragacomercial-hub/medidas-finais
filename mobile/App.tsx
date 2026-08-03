@@ -137,7 +137,7 @@ function Workspace({ userEmail }: { userEmail: string }) {
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.eyebrow}>OPERAÇÃO MÓVEL</Text>
-        <Text style={styles.heading}>Bom trabalho, Franciane</Text>
+        <Text style={styles.heading}>Bom trabalho</Text>
         <Text style={styles.muted}>Tudo nesta tela é salvo primeiro no SQLite deste aparelho.</Text>
 
         <View style={styles.card}>

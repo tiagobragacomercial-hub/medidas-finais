@@ -406,7 +406,7 @@ function Dashboard({
     <>
       <Head
         eye="Painel operacional"
-        title="Bom trabalho, Franciane"
+        title="Bom trabalho"
         sub="Seus levantamentos ficam seguros neste dispositivo, mesmo sem internet."
         action={
           <button
