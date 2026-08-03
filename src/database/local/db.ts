@@ -10,6 +10,7 @@ import type {
   TrashItem,
   Wall,
   Floor,
+  FloorPlanRecord,
 } from "../../types/models";
 class AppDb extends Dexie {
   clients!: EntityTable<Client, "id">;
@@ -22,6 +23,7 @@ class AppDb extends Dexie {
   walls!: EntityTable<Wall, "id">;
   auditLogs!: EntityTable<AuditLog, "id">;
   trashItems!: EntityTable<TrashItem, "id">;
+  floorPlans!: EntityTable<FloorPlanRecord, "id">;
   constructor() {
     super("medidas-finais");
     this.version(1).stores({
@@ -77,6 +79,19 @@ class AppDb extends Dexie {
       walls: "id,environmentId,code,order",
       auditLogs: "id,entity,entityId,action,createdAt",
       trashItems: "id,entity,entityId,expiresAt,createdAt",
+    });
+    this.version(4).stores({
+      clients: "id,name,status,updatedAt",
+      projects: "id,clientId,status,updatedAt",
+      environments: "id,projectId,status",
+      photos: "id,environmentId,syncState,createdAt",
+      annotations: "id,photoId,state,layer,updatedAt",
+      syncOperations: "id,entity,entityId,status,createdAt",
+      floors: "id,projectId,order",
+      walls: "id,environmentId,code,order",
+      auditLogs: "id,entity,entityId,action,createdAt",
+      trashItems: "id,entity,entityId,expiresAt,createdAt",
+      floorPlans: "id,environmentId,updatedAt",
     });
   }
 }

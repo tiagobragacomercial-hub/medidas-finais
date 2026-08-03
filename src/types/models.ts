@@ -101,3 +101,21 @@ export interface TrashItem {
   expiresAt: string;
   createdAt: string;
 }
+export interface FloorPlanElement {
+  id: string;
+  type: "door" | "window" | "camera";
+  x: number;
+  y: number;
+  direction?: number;
+  photoId?: string;
+}
+export interface FloorPlanRecord {
+  id: string;
+  environmentId: string;
+  points: Point[];
+  elements: FloorPlanElement[];
+  confirmed: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}

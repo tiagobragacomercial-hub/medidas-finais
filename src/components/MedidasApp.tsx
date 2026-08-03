@@ -6,6 +6,8 @@ import type {
   Annotation,
   Client,
   Environment,
+  FloorPlanElement,
+  FloorPlanRecord,
   Photo,
   Project,
 } from "../types/models";
@@ -184,7 +186,7 @@ export function MedidasApp() {
           {section === "editor" && (
             <Editor envs={envs} photos={photos} notify={setToast} />
           )}{" "}
-          {section === "floorplan" && <FloorPlan />}{" "}
+          {section === "floorplan" && <FloorPlan envs={envs} />}{" "}
           {section === "sync" && <Sync pending={pending} />}{" "}
           {section === "portal" && <Portal projects={projects} />}
         </main>
@@ -1093,22 +1095,106 @@ function Measure({
     </div>
   );
 }
-function FloorPlan() {
-  return <InteractiveFloorPlan />;
+function FloorPlan({ envs }: { envs: Environment[] }) {
+  return <InteractiveFloorPlan environment={envs[0]} />;
 }
-function InteractiveFloorPlan() {
+function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
     [mode, setMode] = useState<"wall" | "door" | "window" | "camera">("wall"),
-    [elements, setElements] = useState<
-      Array<{ id: string; type: string; x: number; y: number }>
-    >([]),
-    [confirmed, setConfirmed] = useState(false);
+    [elements, setElements] = useState<FloorPlanElement[]>([]),
+    [confirmed, setConfirmed] = useState(false),
+    [hydratedEnvironment, setHydratedEnvironment] = useState(""),
+    [selected, setSelected] = useState<
+      { kind: "point"; index: number } | { kind: "element"; id: string } | null
+    >(null),
+    [dragging, setDragging] = useState(false);
+  const plan = useLiveQuery<FloorPlanRecord | undefined>(
+    () =>
+      environment
+        ? db.floorPlans.where("environmentId").equals(environment.id).first()
+        : Promise.resolve<FloorPlanRecord | undefined>(undefined),
+    [environment?.id],
+  );
+  const environmentPhotos =
+    useLiveQuery<Photo[]>(
+      () =>
+        environment
+          ? db.photos.where("environmentId").equals(environment.id).toArray()
+          : Promise.resolve<Photo[]>([]),
+      [environment?.id],
+    ) || [];
+  useEffect(() => {
+    if (
+      !environment ||
+      plan === undefined ||
+      hydratedEnvironment === environment.id
+    )
+      return;
+    setPoints(plan?.points || []);
+    setElements(plan?.elements || []);
+    setConfirmed(plan?.confirmed || false);
+    setHydratedEnvironment(environment.id);
+  }, [environment, plan, hydratedEnvironment]);
+  useEffect(() => {
+    if (!environment || hydratedEnvironment !== environment.id) return;
+    const timer = setTimeout(async () => {
+      const existing = await db.floorPlans
+        .where("environmentId")
+        .equals(environment.id)
+        .first();
+      const timestamp = now(),
+        id = existing?.id || uid();
+      await db.transaction("rw", db.floorPlans, db.syncOperations, async () => {
+        await db.floorPlans.put({
+          id,
+          environmentId: environment.id,
+          points,
+          elements,
+          confirmed,
+          version: (existing?.version || 0) + 1,
+          createdAt: existing?.createdAt || timestamp,
+          updatedAt: timestamp,
+        });
+        await queue("floorPlan", id, existing ? "update" : "create");
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [points, elements, confirmed, environment, hydratedEnvironment]);
   function add(e: React.PointerEvent<HTMLDivElement>) {
-    if (confirmed) return;
+    if (confirmed || !environment || e.target !== e.currentTarget) return;
     const r = e.currentTarget.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
     if (mode === "wall") setPoints((v) => [...v, p]);
     else setElements((v) => [...v, { id: uid(), type: mode, ...p }]);
+  }
+  function pointerPosition(e: React.PointerEvent<SVGSVGElement>) {
+    return normalizePointer(
+      e.clientX,
+      e.clientY,
+      e.currentTarget.getBoundingClientRect(),
+    );
+  }
+  function moveSelected(e: React.PointerEvent<SVGSVGElement>) {
+    if (!dragging || !selected || confirmed) return;
+    const p = pointerPosition(e);
+    if (selected.kind === "point")
+      setPoints((items) =>
+        items.map((item, index) => (index === selected.index ? p : item)),
+      );
+    else
+      setElements((items) =>
+        items.map((item) =>
+          item.id === selected.id ? { ...item, ...p } : item,
+        ),
+      );
+  }
+  function removeSelected() {
+    if (!selected || confirmed) return;
+    if (selected.kind === "point")
+      setPoints((items) => items.filter((_, i) => i !== selected.index));
+    else
+      setElements((items) => items.filter((item) => item.id !== selected.id));
+    setSelected(null);
   }
   return (
     <>
@@ -1117,10 +1203,27 @@ function InteractiveFloorPlan() {
         title="Desenho do ambiente"
         sub="Desenhe a geometria real; o sistema organiza traços, mas não cria medidas."
       />
+      {!environment && (
+        <section className="card empty">
+          <h2>Crie um ambiente antes da planta</h2>
+          <p>A planta precisa permanecer vinculada ao ambiente correto.</p>
+        </section>
+      )}
       <div className="grid">
         <section className="card wide">
           <div className="floorplan" onPointerDown={add}>
-            <svg viewBox="0 0 1000 600" aria-label="Planta baixa vetorial">
+            <svg
+              viewBox="0 0 1000 600"
+              aria-label="Planta baixa vetorial"
+              onPointerMove={moveSelected}
+              onPointerUp={() => setDragging(false)}
+              onPointerCancel={() => setDragging(false)}
+              onPointerLeave={() => setDragging(false)}
+              onPointerDown={(e) => {
+                if (e.target === e.currentTarget)
+                  add(e as unknown as React.PointerEvent<HTMLDivElement>);
+              }}
+            >
               {points.slice(1).map((p, i) => (
                 <g key={i}>
                   <line
@@ -1145,23 +1248,57 @@ function InteractiveFloorPlan() {
                   key={`p${i}`}
                   cx={p.x * 1000}
                   cy={p.y * 600}
-                  r="10"
-                  fill="#0876db"
+                  r={
+                    selected?.kind === "point" && selected.index === i ? 16 : 10
+                  }
+                  fill={
+                    selected?.kind === "point" && selected.index === i
+                      ? "#f59e0b"
+                      : "#0876db"
+                  }
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (confirmed) return;
+                    setSelected({ kind: "point", index: i });
+                    setDragging(true);
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
                 />
               ))}
               {elements.map((el) => (
                 <g
                   key={el.id}
                   transform={`translate(${el.x * 1000} ${el.y * 600})`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (confirmed) return;
+                    setSelected({ kind: "element", id: el.id });
+                    setDragging(true);
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
                 >
                   <circle
                     r="18"
                     fill={el.type === "camera" ? "#7a3fe0" : "#fff"}
-                    stroke="#0876db"
+                    stroke={
+                      selected?.kind === "element" && selected.id === el.id
+                        ? "#f59e0b"
+                        : "#0876db"
+                    }
                     strokeWidth="4"
                   />
-                  <text x="25" y="6">
+                  {el.type === "door" && (
+                    <path
+                      d="M 0 0 L 38 0 A 38 38 0 0 1 0 38"
+                      fill="none"
+                      stroke="#0876db"
+                      strokeWidth="4"
+                      transform={`rotate(${el.direction || 0})`}
+                    />
+                  )}
+                  <text x="25" y="6" style={{ pointerEvents: "none" }}>
                     {el.type}
+                    {el.type === "camera" && el.photoId ? " • foto" : ""}
                   </text>
                 </g>
               ))}
@@ -1194,6 +1331,65 @@ function InteractiveFloorPlan() {
           </button>
           <button className="btn" onClick={() => setConfirmed((v) => !v)}>
             {confirmed ? "Editar novamente" : "Confirmar planta"}
+          </button>
+          {selected?.kind === "element" &&
+            elements.find((item) => item.id === selected.id)?.type ===
+              "door" && (
+              <button
+                className="btn"
+                disabled={confirmed}
+                onClick={() =>
+                  setElements((items) =>
+                    items.map((item) =>
+                      item.id === selected.id
+                        ? {
+                            ...item,
+                            direction: ((item.direction || 0) + 90) % 360,
+                          }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                Girar abertura da porta
+              </button>
+            )}
+          {selected?.kind === "element" &&
+            elements.find((item) => item.id === selected.id)?.type ===
+              "camera" && (
+              <label className="field">
+                <span>Foto vinculada à câmera</span>
+                <select
+                  disabled={confirmed}
+                  value={
+                    elements.find((item) => item.id === selected.id)?.photoId ||
+                    ""
+                  }
+                  onChange={(e) =>
+                    setElements((items) =>
+                      items.map((item) =>
+                        item.id === selected.id
+                          ? { ...item, photoId: e.target.value || undefined }
+                          : item,
+                      ),
+                    )
+                  }
+                >
+                  <option value="">Sem foto vinculada</option>
+                  {environmentPhotos.map((photo) => (
+                    <option key={photo.id} value={photo.id}>
+                      {photo.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          <button
+            className="btn danger"
+            disabled={!selected || confirmed}
+            onClick={removeSelected}
+          >
+            Excluir item selecionado
           </button>
           <button
             className="btn danger"
