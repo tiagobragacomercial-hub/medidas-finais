@@ -15,9 +15,10 @@
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts tests/rendered-html.test.mjs",
     "test:integration": "node --experimental-strip-types --test tests/integration/*.test.ts",
     "test:e2e": "npm run build && node --test tests/e2e/*.test.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:e2e",
+    "verify": "npm run lint && npm run typecheck && npm run mobile:typecheck && npm run test && npm run test:e2e",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .vercel",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "mobile:typecheck": "npm --prefix mobile run typecheck"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",

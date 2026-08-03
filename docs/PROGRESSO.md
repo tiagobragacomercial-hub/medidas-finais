@@ -25,6 +25,9 @@
 - Verificação após correção do login: lint, TypeScript, 5 testes unitários, 3 testes de integração, build e 6 testes E2E aprovados.
 - Auditoria de controles: navegação superior, Configurações, Abrir levantamento, seleção de projeto/ambiente/foto, seleção da planta, seleção da publicação e saída da conta agora possuem ações reais. Componente legado com botão inativo removido.
 - Verificação após auditoria funcional: lint sem avisos, TypeScript, 6 testes unitários, 3 testes de integração, build e 6 testes E2E aprovados. Validação visual/manual em navegador continua pendente por indisponibilidade do navegador integrado.
+- Aplicativo móvel iniciado em `mobile/` com Expo SDK 57 e TypeScript. SQLite WAL, migração numerada, identificador do dispositivo, clientes, projetos e fila idempotente são gravados localmente em transações.
+- Móvel: autenticação Supabase usa armazenamento seguro; painel permite criar cliente/projeto offline, reabrir dados locais, visualizar pendências e sair da conta. Nenhuma tela móvel grava diretamente na nuvem.
+- Validação móvel: TypeScript aprovado, Expo Doctor 20/20 e bundle Android de produção gerado com sucesso. APK instalável bloqueado externamente: SDK Android não existe neste computador, EAS não está autenticado e o identificador Android permanente ainda precisa de aprovação.
 
 ## Testes de aceitação bloqueantes
 
