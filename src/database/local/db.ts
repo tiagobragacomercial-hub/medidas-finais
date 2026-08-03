@@ -1,0 +1,5 @@
+import Dexie,{type EntityTable}from"dexie";
+import type{Annotation,Client,Environment,Photo,Project,SyncOperation}from"../../types/models";
+class AppDb extends Dexie{clients!:EntityTable<Client,"id">;projects!:EntityTable<Project,"id">;environments!:EntityTable<Environment,"id">;photos!:EntityTable<Photo,"id">;annotations!:EntityTable<Annotation,"id">;syncOperations!:EntityTable<SyncOperation,"id">;constructor(){super("medidas-finais");this.version(1).stores({clients:"id,name,status,updatedAt",projects:"id,clientId,status,updatedAt",environments:"id,projectId,status",photos:"id,environmentId,syncState,createdAt",annotations:"id,photoId,state,layer,updatedAt",syncOperations:"id,status,createdAt"})}}
+export const db=new AppDb();export const uid=()=>crypto.randomUUID();export const now=()=>new Date().toISOString();
+export async function queue(entity:string,entityId:string,action:SyncOperation["action"]){await db.syncOperations.put({id:uid(),entity,entityId,action,attempts:0,status:"pending",createdAt:now()})}
