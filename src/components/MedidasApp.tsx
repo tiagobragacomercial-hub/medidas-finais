@@ -46,7 +46,8 @@ import {
 import {
   classifyStroke,
   processFreehandStroke,
-  rectifyPath,
+  polylineStroke,
+  polylinePath,
   strokePath,
   wallCode,
 } from "../features/floor-plan/geometry";
@@ -82,6 +83,7 @@ export function MedidasApp() {
   const [section, setSection] = useState<Section>("dashboard"),
     [selectedProjectId, setSelectedProjectId] = useState(""),
     [selectedEnvironmentId, setSelectedEnvironmentId] = useState(""),
+    [preferredClientId, setPreferredClientId] = useState(""),
     [modal, setModal] = useState<null | "client" | "project" | "environment">(
       null,
     ),
@@ -100,15 +102,43 @@ export function MedidasApp() {
         [],
       ) || 0;
   const selectedProjectEnvironments = selectedProjectId
-    ? envs.filter((environment) => environment.projectId === selectedProjectId)
-    : envs,
+      ? envs.filter(
+          (environment) => environment.projectId === selectedProjectId,
+        )
+      : envs,
     firstProjectId = projects[0]?.id;
+  const selectedProject = projects.find(
+    (item) => item.id === selectedProjectId,
+  );
+  const selectedClient = clients.find(
+    (item) => item.id === selectedProject?.clientId,
+  );
+  const selectedEnvironment = envs.find(
+    (item) => item.id === selectedEnvironmentId,
+  );
+  const goToNextEnvironment = () => {
+    if (!selectedProjectEnvironments.length) return;
+    const currentIndex = selectedProjectEnvironments.findIndex(
+      (item) => item.id === selectedEnvironmentId,
+    );
+    const next =
+      selectedProjectEnvironments[
+        (currentIndex + 1) % selectedProjectEnvironments.length
+      ];
+    setSelectedEnvironmentId(next.id);
+    setSection("floorplan");
+    setToast(`Ambiente atual: ${next.name}`);
+    setTimeout(() => setToast(""), 2200);
+  };
   useEffect(() => {
-    if (!selectedProjectId && firstProjectId) setSelectedProjectId(firstProjectId);
+    if (!selectedProjectId && firstProjectId)
+      setSelectedProjectId(firstProjectId);
   }, [firstProjectId, selectedProjectId]);
   useEffect(() => {
     const available = selectedProjectEnvironments;
-    if (!available.some((environment) => environment.id === selectedEnvironmentId))
+    if (
+      !available.some((environment) => environment.id === selectedEnvironmentId)
+    )
       setSelectedEnvironmentId(available[0]?.id || "");
   }, [selectedEnvironmentId, selectedProjectEnvironments]);
   useEffect(() => {
@@ -140,19 +170,19 @@ export function MedidasApp() {
         </div>
         <nav>
           <button
-            className={`navbtn ${!['portal', 'settings'].includes(section) ? 'active' : ''}`}
+            className={`navbtn ${!["portal", "settings"].includes(section) ? "active" : ""}`}
             onClick={() => setSection("dashboard")}
           >
             Operação
           </button>
           <button
-            className={`navbtn ${section === 'portal' ? 'active' : ''}`}
+            className={`navbtn ${section === "portal" ? "active" : ""}`}
             onClick={() => setSection("portal")}
           >
             Publicações
           </button>
           <button
-            className={`navbtn ${section === 'settings' ? 'active' : ''}`}
+            className={`navbtn ${section === "settings" ? "active" : ""}`}
             onClick={() => setSection("settings")}
           >
             Administração
@@ -229,6 +259,54 @@ export function MedidasApp() {
           />
         </aside>
         <main className="content">
+          {selectedProject &&
+            !["portal", "settings", "dashboard"].includes(section) && (
+              <section
+                className="project-journey"
+                aria-label="Acesso rápido do projeto atual"
+              >
+                <div className="journey-context">
+                  <small>TRABALHO ATUAL</small>
+                  <strong>
+                    {selectedClient?.name || "Cliente"} · {selectedProject.name}
+                  </strong>
+                  <span>
+                    {selectedEnvironment
+                      ? `Ambiente: ${selectedEnvironment.name}`
+                      : "Escolha ou crie um ambiente"}
+                  </span>
+                </div>
+                <div className="journey-actions">
+                  <button
+                    className="btn"
+                    onClick={() => setModal("environment")}
+                  >
+                    + Novo ambiente
+                  </button>
+                  <button
+                    className={`btn ${section === "floorplan" ? "primary" : ""}`}
+                    disabled={!selectedEnvironment}
+                    onClick={() => setSection("floorplan")}
+                  >
+                    Desenhar planta
+                  </button>
+                  <button
+                    className={`btn ${section === "editor" ? "primary" : ""}`}
+                    disabled={!selectedEnvironment}
+                    onClick={() => setSection("editor")}
+                  >
+                    Fotos, medidas e vídeo
+                  </button>
+                  <button
+                    className="btn next-step"
+                    disabled={selectedProjectEnvironments.length < 2}
+                    onClick={goToNextEnvironment}
+                  >
+                    Próximo ambiente →
+                  </button>
+                </div>
+              </section>
+            )}
           {section === "dashboard" && (
             <Dashboard
               clients={clients}
@@ -252,7 +330,9 @@ export function MedidasApp() {
               addEnv={() => setModal("environment")}
               open={(projectId) => {
                 setSelectedProjectId(projectId);
-                const environment = envs.find((item) => item.projectId === projectId);
+                const environment = envs.find(
+                  (item) => item.projectId === projectId,
+                );
                 setSelectedEnvironmentId(environment?.id || "");
                 setSection("editor");
               }}
@@ -315,10 +395,27 @@ export function MedidasApp() {
           type={modal}
           clients={clients}
           projects={projects}
+          preferredClientId={preferredClientId}
+          preferredProjectId={selectedProjectId}
           close={() => setModal(null)}
-          saved={() => {
-            setModal(null);
+          saved={({ type, id, projectId, environmentId }) => {
             setToast("Salvo neste dispositivo");
+            if (type === "client") {
+              setPreferredClientId(id);
+              setModal(null);
+              if (projectId) setSelectedProjectId(projectId);
+              setSelectedEnvironmentId(environmentId || "");
+              setSection("floorplan");
+            } else if (type === "project") {
+              setModal(null);
+              setSelectedProjectId(id);
+              setSelectedEnvironmentId(environmentId || "");
+              setSection("floorplan");
+            } else {
+              setModal(null);
+              setSelectedEnvironmentId(id);
+              setSection("floorplan");
+            }
             setTimeout(() => setToast(""), 2200);
           }}
         />
@@ -543,10 +640,18 @@ function Projects({
         sub="Organize ambientes, fotos e versões de cada entrega."
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn" onClick={addEnv} disabled={!projects.length}>
+            <button
+              className="btn"
+              onClick={addEnv}
+              disabled={!projects.length}
+            >
               + Ambiente
             </button>
-            <button className="btn primary" onClick={add} disabled={!clients.length}>
+            <button
+              className="btn primary"
+              onClick={add}
+              disabled={!clients.length}
+            >
               + Novo projeto
             </button>
           </div>
@@ -573,6 +678,47 @@ function Projects({
               style={{ width: "100%", justifyContent: "center" }}
               onClick={() => open(p.id)}
             >
+              <defs>
+                <pattern
+                  id="floor-grid-small"
+                  width="20"
+                  height="20"
+                  patternUnits="userSpaceOnUse"
+                >
+                  <path
+                    d="M 20 0 L 0 0 0 20"
+                    fill="none"
+                    stroke="#b9cbd9"
+                    strokeWidth="0.65"
+                    opacity="0.28"
+                  />
+                </pattern>
+                <pattern
+                  id="floor-grid-large"
+                  width="100"
+                  height="100"
+                  patternUnits="userSpaceOnUse"
+                >
+                  <rect
+                    width="100"
+                    height="100"
+                    fill="url(#floor-grid-small)"
+                  />
+                  <path
+                    d="M 100 0 L 0 0 0 100"
+                    fill="none"
+                    stroke="#91a9bb"
+                    strokeWidth="1"
+                    opacity="0.22"
+                  />
+                </pattern>
+              </defs>
+              <rect
+                width="1000"
+                height="600"
+                fill="url(#floor-grid-large)"
+                pointerEvents="none"
+              />
               Abrir levantamento
             </button>
           </article>
@@ -590,55 +736,155 @@ function Modal({
   type,
   clients,
   projects,
+  preferredClientId,
+  preferredProjectId,
   close,
   saved,
 }: {
   type: "client" | "project" | "environment";
   clients: Client[];
   projects: Project[];
+  preferredClientId?: string;
+  preferredProjectId?: string;
   close: () => void;
-  saved: () => void;
+  saved: (result: {
+    type: "client" | "project" | "environment";
+    id: string;
+    projectId?: string;
+    environmentId?: string;
+  }) => void;
 }) {
   const ref = useRef<HTMLFormElement>(null);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const f = new FormData(ref.current!),
       id = uid();
-    if (type === "client")
-      await db.clients.put({
-        id,
-        name: String(f.get("name")),
-        phone: String(f.get("phone") || ""),
-        email: String(f.get("email") || ""),
-        address: String(f.get("address") || ""),
-        notes: String(f.get("notes") || ""),
-        status: "active",
-        createdAt: now(),
-        updatedAt: now(),
+    if (type === "client") {
+      const clientId = id;
+      const projectId = uid();
+      const clientName = String(f.get("name") || "").trim();
+      const address = String(f.get("address") || "").trim();
+      const selectedEnvironmentTypes = f
+        .getAll("envTypes")
+        .map((item) => String(item).trim())
+        .filter(Boolean);
+      const customEnvironmentNames = String(f.get("customEnvironments") || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const environmentNames = Array.from(
+        new Set([...selectedEnvironmentTypes, ...customEnvironmentNames]),
+      );
+
+      if (!environmentNames.length) {
+        window.alert(
+          "Selecione pelo menos um ambiente para iniciar o levantamento.",
+        );
+        return;
+      }
+
+      const environmentRecords: Environment[] = environmentNames.map(
+        (name) => ({
+          id: uid(),
+          projectId,
+          name,
+          type: name,
+          status: "active",
+        }),
+      );
+
+      await db.transaction(
+        "rw",
+        db.clients,
+        db.projects,
+        db.environments,
+        db.syncOperations,
+        async () => {
+          await db.clients.put({
+            id: clientId,
+            name: clientName,
+            phone: String(f.get("phone") || "").trim(),
+            email: String(f.get("email") || "").trim(),
+            address,
+            notes: String(f.get("notes") || "").trim(),
+            status: "active",
+            createdAt: now(),
+            updatedAt: now(),
+          });
+
+          await db.projects.put({
+            id: projectId,
+            clientId,
+            name: clientName,
+            address,
+            responsible: String(f.get("responsible") || "").trim(),
+            unit: (f.get("unit") || "mm") as Project["unit"],
+            status: "draft",
+            version: 1,
+            createdAt: now(),
+            updatedAt: now(),
+          });
+
+          for (const environment of environmentRecords)
+            await db.environments.put(environment);
+
+          await queue("client", clientId, "create");
+          await queue("project", projectId, "create");
+          for (const environment of environmentRecords)
+            await queue("environment", environment.id, "create");
+        },
+      );
+
+      saved({
+        type,
+        id: clientId,
+        projectId,
+        environmentId: environmentRecords[0]?.id,
       });
-    else if (type === "project")
-      await db.projects.put({
-        id,
-        clientId: String(f.get("clientId")),
-        name: String(f.get("name")),
-        address: String(f.get("address") || ""),
-        responsible: String(f.get("responsible") || ""),
-        unit: (f.get("unit") || "mm") as Project["unit"],
-        status: "draft",
-        version: 1,
-        createdAt: now(),
-        updatedAt: now(),
-      });
-    else
+      return;
+    } else if (type === "project") {
+      const environmentId = uid();
+      await db.transaction(
+        "rw",
+        db.projects,
+        db.environments,
+        db.syncOperations,
+        async () => {
+          await db.projects.put({
+            id,
+            clientId: String(f.get("clientId")),
+            name: String(f.get("name")),
+            address: String(f.get("address") || ""),
+            responsible: String(f.get("responsible") || ""),
+            unit: (f.get("unit") || "mm") as Project["unit"],
+            status: "draft",
+            version: 1,
+            createdAt: now(),
+            updatedAt: now(),
+          });
+          await db.environments.put({
+            id: environmentId,
+            projectId: id,
+            name: String(f.get("envType")),
+            type: String(f.get("envType")),
+            status: "active",
+          });
+          await queue("project", id, "create");
+          await queue("environment", environmentId, "create");
+        },
+      );
+      saved({ type, id, environmentId });
+      return;
+    } else
       await db.environments.put({
         id,
         projectId: String(f.get("projectId")),
-        name: String(f.get("name")),
+        name: String(f.get("envType")),
         type: String(f.get("envType")),
         status: "active",
       });
     await queue(type, id, "create");
-    saved();
+    saved({ type, id });
   }
   return (
     <div className="modalback">
@@ -658,7 +904,11 @@ function Modal({
         <div className="formgrid">
           {type === "project" && (
             <Field label="Cliente">
-              <select name="clientId" required>
+              <select
+                name="clientId"
+                required
+                defaultValue={preferredClientId || clients[0]?.id}
+              >
                 {clients.map((c) => (
                   <option value={c.id} key={c.id}>
                     {c.name}
@@ -670,7 +920,11 @@ function Modal({
           {type === "environment" && (
             <>
               <Field label="Projeto">
-                <select name="projectId" required>
+                <select
+                  name="projectId"
+                  required
+                  defaultValue={preferredProjectId || projects[0]?.id}
+                >
                   {projects.map((p) => (
                     <option value={p.id} key={p.id}>
                       {p.name}
@@ -678,8 +932,8 @@ function Modal({
                   ))}
                 </select>
               </Field>
-              <Field label="Tipo">
-                <select name="envType">
+              <Field label="Ambiente">
+                <select name="envType" autoFocus>
                   {types.map((t) => (
                     <option key={t}>{t}</option>
                   ))}
@@ -687,9 +941,13 @@ function Modal({
               </Field>
             </>
           )}
-          <Field label="Nome">
-            <input name="name" required autoFocus />
-          </Field>
+          {type !== "environment" && (
+            <Field
+              label={type === "project" ? "Nome do projeto" : "Nome do cliente"}
+            >
+              <input name="name" required autoFocus />
+            </Field>
+          )}
           {type === "client" && (
             <>
               <Field label="Telefone">
@@ -700,6 +958,60 @@ function Modal({
               </Field>
               <Field label="Endereço" full>
                 <input name="address" />
+              </Field>
+              <Field label="Responsável pela medição">
+                <input
+                  name="responsible"
+                  required
+                  placeholder="Nome de quem fará o levantamento"
+                />
+              </Field>
+              <Field label="Unidade das medidas">
+                <select name="unit" defaultValue="mm">
+                  <option value="mm">Milímetros</option>
+                  <option value="cm">Centímetros</option>
+                  <option value="m">Metros</option>
+                </select>
+              </Field>
+              <Field label="Ambientes que serão medidos" full>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                    gap: 10,
+                    padding: 12,
+                    border: "1px solid var(--border, #d9e2ea)",
+                    borderRadius: 12,
+                  }}
+                >
+                  {types
+                    .filter((item) => item !== "Personalizado")
+                    .map((item) => (
+                      <label
+                        key={item}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          name="envTypes"
+                          value={item}
+                          style={{ width: 18, height: 18 }}
+                        />
+                        <span>{item}</span>
+                      </label>
+                    ))}
+                </div>
+              </Field>
+              <Field label="Outros ambientes" full>
+                <input
+                  name="customEnvironments"
+                  placeholder="Ex.: Dormitório 1, Dormitório 2, Closet"
+                />
               </Field>
               <Field label="Observações internas" full>
                 <textarea name="notes" rows={3} />
@@ -721,6 +1033,13 @@ function Modal({
                   <option value="m">Metros</option>
                 </select>
               </Field>
+              <Field label="Primeiro ambiente">
+                <select name="envType" defaultValue="Cozinha">
+                  {types.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
             </>
           )}
         </div>
@@ -730,7 +1049,11 @@ function Modal({
           </button>
           <button className="btn primary">
             <Save size={16} />
-            Salvar no dispositivo
+            {type === "client"
+              ? "Salvar e iniciar levantamento"
+              : type === "project"
+                ? "Criar e iniciar projeto"
+                : "Salvar no dispositivo"}
           </button>
         </div>
       </form>
@@ -789,13 +1112,16 @@ function Editor({
     [draftPoints, setDraftPoints] = useState<Array<{ x: number; y: number }>>(
       [],
     ),
-    [draftPointer, setDraftPointer] = useState<{ x: number; y: number } | null>(null),
+    [draftPointer, setDraftPointer] = useState<{ x: number; y: number } | null>(
+      null,
+    ),
     [selected, setSelected] = useState(""),
     [photoDrag, setPhotoDrag] = useState<{
       annotationId: string;
-      target: "start" | "end" | "label";
+      target: "start" | "end" | "label" | "description";
     } | null>(null);
   const file = useRef<HTMLInputElement>(null),
+    cameraFile = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!environmentPhotos.some((item) => item.id === photoId))
@@ -843,7 +1169,12 @@ function Editor({
       const video = document.createElement("video");
       video.preload = "metadata";
       video.onloadedmetadata = () =>
-        void saveMedia(video.videoWidth, video.videoHeight, "video", video.duration);
+        void saveMedia(
+          video.videoWidth,
+          video.videoHeight,
+          "video",
+          video.duration,
+        );
       video.onerror = () => {
         URL.revokeObjectURL(url);
         notify("Formato de vídeo não suportado neste navegador");
@@ -900,6 +1231,7 @@ function Editor({
         return setDraftPoints([]);
       }
       value = parsed.data;
+      description = prompt("Descrição da medida (opcional):", "")?.trim() || "";
       if (tool === "l") {
         const second = prompt("Informe a segunda medida:", "") ?? "",
           parsedSecond = measurementValueSchema.safeParse(second.trim());
@@ -938,18 +1270,37 @@ function Editor({
   async function movePhotoAnnotation(e: React.PointerEvent<HTMLDivElement>) {
     if (draftPoints.length && canvas.current && isAnnotationTool(tool))
       setDraftPointer(
-        normalizePointer(e.clientX, e.clientY, canvas.current.getBoundingClientRect()),
+        normalizePointer(
+          e.clientX,
+          e.clientY,
+          canvas.current.getBoundingClientRect(),
+        ),
       );
     if (!photoDrag || !canvas.current) return;
-    const point = normalizePointer(e.clientX, e.clientY, canvas.current.getBoundingClientRect());
+    const point = normalizePointer(
+      e.clientX,
+      e.clientY,
+      canvas.current.getBoundingClientRect(),
+    );
     const annotation = await db.annotations.get(photoDrag.annotationId);
     if (!annotation) return;
     if (photoDrag.target === "label")
-      await db.annotations.update(annotation.id, { labelPoint: point, updatedAt: now() });
-    else {
-      const index = photoDrag.target === "start" ? 0 : annotation.points.length - 1;
       await db.annotations.update(annotation.id, {
-        points: annotation.points.map((item, itemIndex) => itemIndex === index ? point : item),
+        labelPoint: point,
+        updatedAt: now(),
+      });
+    else if (photoDrag.target === "description")
+      await db.annotations.update(annotation.id, {
+        descriptionPoint: point,
+        updatedAt: now(),
+      });
+    else {
+      const index =
+        photoDrag.target === "start" ? 0 : annotation.points.length - 1;
+      await db.annotations.update(annotation.id, {
+        points: annotation.points.map((item, itemIndex) =>
+          itemIndex === index ? point : item,
+        ),
         updatedAt: now(),
       });
     }
@@ -958,7 +1309,10 @@ function Editor({
     if (!photoDrag) return;
     const annotation = await db.annotations.get(photoDrag.annotationId);
     if (annotation)
-      await db.annotations.update(annotation.id, { version: annotation.version + 1, updatedAt: now() });
+      await db.annotations.update(annotation.id, {
+        version: annotation.version + 1,
+        updatedAt: now(),
+      });
     await queue("annotation", photoDrag.annotationId, "update");
     setPhotoDrag(null);
     notify("Posição salva neste dispositivo");
@@ -1053,18 +1407,33 @@ function Editor({
               accept="image/jpeg,image/png,image/heic,video/mp4,video/quicktime,video/webm"
               onChange={upload}
             />
+            <input
+              ref={cameraFile}
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={upload}
+            />
             <button
               className="btn primary"
-              onClick={() => file.current?.click()}
+              onClick={() => cameraFile.current?.click()}
             >
+              <Camera size={17} />
+              Tirar foto
+            </button>
+            <button className="btn" onClick={() => file.current?.click()}>
               <ImagePlus size={17} />
-              Importar foto ou vídeo
+              Importar da galeria
             </button>
           </>
         }
       />
       <section className="card" style={{ marginBottom: 14 }}>
-        <div className="actions" style={{ alignItems: "end", flexWrap: "wrap" }}>
+        <div
+          className="actions"
+          style={{ alignItems: "end", flexWrap: "wrap" }}
+        >
           <label className="field" style={{ minWidth: 240 }}>
             <span>Ambiente</span>
             <select
@@ -1152,7 +1521,14 @@ function Editor({
                   <svg
                     viewBox="0 0 1000 1000"
                     aria-label="Prévia da medida em criação"
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 6 }}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      pointerEvents: "none",
+                      zIndex: 6,
+                    }}
                     preserveAspectRatio="none"
                   >
                     <line
@@ -1164,8 +1540,18 @@ function Editor({
                       strokeWidth="5"
                       strokeDasharray="14 9"
                     />
-                    <circle cx={draftPoints[0].x * 1000} cy={draftPoints[0].y * 1000} r="11" fill="#0876db" />
-                    <circle cx={draftPointer.x * 1000} cy={draftPointer.y * 1000} r="11" fill="#f59e0b" />
+                    <circle
+                      cx={draftPoints[0].x * 1000}
+                      cy={draftPoints[0].y * 1000}
+                      r="11"
+                      fill="#0876db"
+                    />
+                    <circle
+                      cx={draftPointer.x * 1000}
+                      cy={draftPointer.y * 1000}
+                      r="11"
+                      fill="#f59e0b"
+                    />
                   </svg>
                 )}
                 {anns
@@ -1229,6 +1615,24 @@ function Editor({
                   <button className="btn" onClick={() => edit(a)}>
                     <Lock size={13} />
                     Desbloquear
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      const description = prompt(
+                        "Descrição da medida:",
+                        a.description || "",
+                      );
+                      if (description === null) return;
+                      await db.annotations.update(a.id, {
+                        description: description.trim(),
+                        version: a.version + 1,
+                        updatedAt: now(),
+                      });
+                      await queue("annotation", a.id, "update");
+                    }}
+                  >
+                    Editar descrição
                   </button>
                   <select
                     aria-label="Posição do número"
@@ -1309,7 +1713,12 @@ function EnvironmentVideo({ media }: { media: Photo }) {
         controls
         preload="metadata"
         src={url}
-        style={{ width: "100%", maxHeight: 320, borderRadius: 12, background: "#111" }}
+        style={{
+          width: "100%",
+          maxHeight: 320,
+          borderRadius: 12,
+          background: "#111",
+        }}
       />
       <strong>{media.name}</strong>
       <small style={{ display: "block" }}>
@@ -1331,7 +1740,7 @@ function Measure({
   a: Annotation;
   selected: boolean;
   click: () => void;
-  startDrag: (target: "start" | "end" | "label") => void;
+  startDrag: (target: "start" | "end" | "label" | "description") => void;
   showHandles: boolean;
 }) {
   if (a.type === "technical" || a.type === "detail" || a.type === "text") {
@@ -1429,7 +1838,26 @@ function Measure({
       >
         {a.value || "?"}
       </button>
-      {selected && showHandles &&
+      {a.description && (
+        <button
+          className="measurement-description"
+          data-annotation-control
+          onClick={click}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            startDrag("description");
+          }}
+          style={{
+            left: `${(a.descriptionPoint?.x ?? label.x) * 100}%`,
+            top: `${(a.descriptionPoint?.y ?? Math.min(0.96, label.y + 0.07)) * 100}%`,
+          }}
+        >
+          {a.description}
+        </button>
+      )}
+      {selected &&
+        showHandles &&
         [p1, p2].map((point, index) => (
           <button
             key={index}
@@ -1493,9 +1921,19 @@ function FloorPlan({
 }
 function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
-    [strokes, setStrokes] = useState<Array<Array<{ x: number; y: number }>>>([]),
+    [strokes, setStrokes] = useState<Array<Array<{ x: number; y: number }>>>(
+      [],
+    ),
+    [strokeKinds, setStrokeKinds] = useState<Array<"polyline" | "curve">>([]),
     [mode, setMode] = useState<
-      "wall" | "door" | "window" | "camera" | "measure" | "text"
+      | "wall"
+      | "curve"
+      | "point"
+      | "door"
+      | "window"
+      | "camera"
+      | "measure"
+      | "text"
     >("wall"),
     [elements, setElements] = useState<FloorPlanElement[]>([]),
     [measurements, setMeasurements] = useState<FloorPlanMeasurement[]>([]),
@@ -1519,9 +1957,9 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     >(null),
     [dragging, setDragging] = useState(false),
     [drawingStroke, setDrawingStroke] = useState(false),
-    [dragPart, setDragPart] = useState<
-      "item" | "start" | "end" | "label"
-    >("item");
+    [dragPart, setDragPart] = useState<"item" | "start" | "end" | "label">(
+      "item",
+    );
   const plan = useLiveQuery<FloorPlanRecord | undefined>(
     () =>
       environment
@@ -1544,6 +1982,10 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         : Promise.resolve<Project | undefined>(undefined),
     [environment?.projectId],
   );
+  const selectedElement =
+    selected?.kind === "element"
+      ? elements.find((item) => item.id === selected.id)
+      : undefined;
   useEffect(() => {
     if (
       !environment ||
@@ -1558,6 +2000,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         : plan?.points?.length
           ? [plan.points]
           : [],
+    );
+    setStrokeKinds(
+      plan?.strokeKinds?.length
+        ? plan.strokeKinds
+        : (plan?.strokes || []).map((stroke) =>
+            classifyStroke(stroke) === "curve" ? "curve" : "polyline",
+          ),
     );
     setElements(plan?.elements || []);
     setMeasurements(plan?.measurements || []);
@@ -1580,6 +2029,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           environmentId: environment.id,
           points: strokes[0] || points,
           strokes,
+          strokeKinds,
           elements,
           measurements,
           texts,
@@ -1595,6 +2045,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
   }, [
     points,
     strokes,
+    strokeKinds,
     elements,
     measurements,
     texts,
@@ -1606,17 +2057,74 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     if (confirmed || !environment || e.target !== e.currentTarget) return;
     const r = e.currentTarget.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
-    if (mode === "wall") {
+    if (mode === "wall" || mode === "curve") {
       setStrokes((items) => [...items, [p]]);
+      setStrokeKinds((items) => [
+        ...items,
+        mode === "curve" ? "curve" : "polyline",
+      ]);
       setDrawingStroke(true);
       e.currentTarget.setPointerCapture(e.pointerId);
-    }
-    else if (mode === "measure") {
+    } else if (mode === "point") {
+      let best: {
+        strokeIndex: number;
+        segmentIndex: number;
+        distance: number;
+      } | null = null;
+      for (
+        let strokeIndex = 0;
+        strokeIndex < strokes.length;
+        strokeIndex += 1
+      ) {
+        const stroke = strokes[strokeIndex];
+        for (let pointIndex = 1; pointIndex < stroke.length; pointIndex += 1) {
+          const end = stroke[pointIndex],
+            segmentIndex = pointIndex - 1,
+            start = stroke[segmentIndex],
+            vx = end.x - start.x,
+            vy = end.y - start.y,
+            lengthSquared = vx * vx + vy * vy,
+            t = lengthSquared
+              ? Math.max(
+                  0,
+                  Math.min(
+                    1,
+                    ((p.x - start.x) * vx + (p.y - start.y) * vy) /
+                      lengthSquared,
+                  ),
+                )
+              : 0,
+            x = start.x + vx * t,
+            y = start.y + vy * t,
+            distance = Math.hypot(p.x - x, p.y - y);
+          if (!best || distance < best.distance)
+            best = { strokeIndex, segmentIndex, distance };
+        }
+      }
+      if (best && best.distance < 0.08) {
+        const target = best;
+        setStrokes((items) =>
+          items.map((stroke, index) =>
+            index === target.strokeIndex
+              ? [
+                  ...stroke.slice(0, target.segmentIndex + 1),
+                  p,
+                  ...stroke.slice(target.segmentIndex + 1),
+                ]
+              : stroke,
+          ),
+        );
+        setSelected({
+          kind: "point",
+          strokeIndex: target.strokeIndex,
+          index: target.segmentIndex + 1,
+        });
+      }
+    } else if (mode === "measure") {
       if (!measurementStart) {
         setMeasurementStart(p);
         setMeasurementPreview(p);
-      }
-      else {
+      } else {
         const informed = prompt("Agora informe o número real da medida:", "");
         if (informed === null) {
           setMeasurementStart(null);
@@ -1650,7 +2158,11 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         setTexts((items) => [...items, { id, value, point: p }]);
         setSelected({ kind: "text", id });
       }
-    } else setElements((v) => [...v, { id: uid(), type: mode, ...p }]);
+    } else {
+      const id = uid();
+      setElements((items) => [...items, { id, type: mode, ...p }]);
+      setSelected({ kind: "element", id });
+    }
   }
   function pointerPosition(e: React.PointerEvent<SVGSVGElement>) {
     return normalizePointer(
@@ -1663,10 +2175,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     const p = pointerPosition(e);
     if (measurementStart && mode === "measure" && !confirmed)
       setMeasurementPreview(p);
-    if (drawingStroke && mode === "wall" && !confirmed) {
+    if (drawingStroke && (mode === "wall" || mode === "curve") && !confirmed) {
       setStrokes((items) => {
-        const next = [...items], current = [...(next[next.length - 1] || [])], last = current[current.length - 1];
-        if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 0.008) current.push(p);
+        const next = [...items],
+          current = [...(next[next.length - 1] || [])],
+          last = current[current.length - 1];
+        if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 0.008)
+          current.push(p);
         next[next.length - 1] = current;
         return next;
       });
@@ -1698,7 +2213,9 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       );
     else if (selected.kind === "text")
       setTexts((items) =>
-        items.map((item) => item.id === selected.id ? { ...item, point: p } : item),
+        items.map((item) =>
+          item.id === selected.id ? { ...item, point: p } : item,
+        ),
       );
   }
   function finishCanvasGesture() {
@@ -1706,7 +2223,11 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       setStrokes((items) =>
         items
           .map((stroke, index) =>
-            index === items.length - 1 ? processFreehandStroke(stroke) : stroke,
+            index === items.length - 1
+              ? mode === "curve"
+                ? processFreehandStroke(stroke)
+                : polylineStroke(stroke)
+              : stroke,
           )
           .filter((stroke) => stroke.length > 1),
       );
@@ -1757,7 +2278,9 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               onPointerMove={moveSelected}
               onPointerUp={finishCanvasGesture}
               onPointerCancel={finishCanvasGesture}
-              onPointerLeave={() => { if (!drawingStroke) setDragging(false); }}
+              onPointerLeave={() => {
+                if (!drawingStroke) setDragging(false);
+              }}
               onPointerDown={add}
             >
               {strokes.map((stroke, strokeIndex) => {
@@ -1765,7 +2288,16 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 return (
                   <g key={`stroke-${strokeIndex}`}>
                     <path
-                      d={strokePath(stroke)}
+                      d={
+                        strokeKinds[strokeIndex] === "curve"
+                          ? strokePath(stroke)
+                          : polylinePath(
+                              drawingStroke &&
+                                strokeIndex === strokes.length - 1
+                                ? polylineStroke(stroke)
+                                : stroke,
+                            )
+                      }
                       fill="none"
                       stroke="#163b59"
                       strokeWidth="9"
@@ -1780,7 +2312,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         fill="#075da9"
                         pointerEvents="none"
                       >
-                        {classifyStroke(stroke) === "straight"
+                        {strokeKinds[strokeIndex] !== "curve"
                           ? "Reta"
                           : classifyStroke(stroke) === "curve"
                             ? "Curva"
@@ -1821,7 +2353,10 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       strokeDasharray="12 7"
                       pointerEvents="none"
                     />
-                    {[{ x: x1, y: y1, part: "start" as const }, { x: x2, y: y2, part: "end" as const }].map((handle) => (
+                    {[
+                      { x: x1, y: y1, part: "start" as const },
+                      { x: x2, y: y2, part: "end" as const },
+                    ].map((handle) => (
                       <circle
                         key={handle.part}
                         cx={handle.x}
@@ -1829,15 +2364,22 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         r={selectedMeasurement ? 12 : 7}
                         fill="#d12f2f"
                         pointerEvents={
-                          selectedMeasurement && mode !== "measure" ? "auto" : "none"
+                          selectedMeasurement && mode !== "measure"
+                            ? "auto"
+                            : "none"
                         }
                         onPointerDown={(event) => {
                           event.stopPropagation();
                           if (confirmed) return;
-                          setSelected({ kind: "measurement", id: measurement.id });
+                          setSelected({
+                            kind: "measurement",
+                            id: measurement.id,
+                          });
                           setDragPart(handle.part);
                           setDragging(true);
-                          event.currentTarget.setPointerCapture(event.pointerId);
+                          event.currentTarget.setPointerCapture(
+                            event.pointerId,
+                          );
                         }}
                       />
                     ))}
@@ -1852,11 +2394,16 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       onPointerDown={(event) => {
                         event.stopPropagation();
                         if (confirmed) return;
-                        setSelected({ kind: "measurement", id: measurement.id });
+                        setSelected({
+                          kind: "measurement",
+                          id: measurement.id,
+                        });
                         setDragPart("label");
                         if (selectedMeasurement) {
                           setDragging(true);
-                          event.currentTarget.setPointerCapture(event.pointerId);
+                          event.currentTarget.setPointerCapture(
+                            event.pointerId,
+                          );
                         }
                       }}
                     />
@@ -1897,10 +2444,20 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     height="34"
                     rx="6"
                     fill="#fff"
-                    stroke={selected?.kind === "text" && selected.id === item.id ? "#f59e0b" : "#163b59"}
+                    stroke={
+                      selected?.kind === "text" && selected.id === item.id
+                        ? "#f59e0b"
+                        : "#163b59"
+                    }
                     strokeWidth="3"
                   />
-                  <text x="4" y="0" fill="#172534" fontWeight="700" style={{ pointerEvents: "none" }}>
+                  <text
+                    x="4"
+                    y="0"
+                    fill="#172534"
+                    fontWeight="700"
+                    style={{ pointerEvents: "none" }}
+                  >
                     {item.value}
                   </text>
                 </g>
@@ -1938,28 +2495,44 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   )}
                 </g>
               )}
-              {!confirmed && mode === "wall" && strokes.flatMap((stroke, strokeIndex) => {
-                const indexes = stroke.length > 1 ? [0, stroke.length - 1] : [];
-                return indexes.map((pointIndex) => {
-                  const point = stroke[pointIndex];
-                  const isSelected = selected?.kind === "point" && selected.strokeIndex === strokeIndex && selected.index === pointIndex;
-                  return (
-                    <circle
-                      key={`p-${strokeIndex}-${pointIndex}`}
-                      cx={point.x * 1000}
-                      cy={point.y * 600}
-                      r={isSelected ? 16 : 9}
-                      fill={isSelected ? "#f59e0b" : "#0876db"}
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                        setSelected({ kind: "point", strokeIndex, index: pointIndex });
-                        setDragging(true);
-                        event.currentTarget.setPointerCapture(event.pointerId);
-                      }}
-                    />
-                  );
-                });
-              })}
+              {!confirmed &&
+                (mode === "wall" || mode === "curve" || mode === "point") &&
+                strokes.flatMap((stroke, strokeIndex) => {
+                  const indexes =
+                    mode === "point"
+                      ? stroke.map((_, index) => index)
+                      : stroke.length > 1
+                        ? [0, stroke.length - 1]
+                        : [];
+                  return indexes.map((pointIndex) => {
+                    const point = stroke[pointIndex];
+                    const isSelected =
+                      selected?.kind === "point" &&
+                      selected.strokeIndex === strokeIndex &&
+                      selected.index === pointIndex;
+                    return (
+                      <circle
+                        key={`p-${strokeIndex}-${pointIndex}`}
+                        cx={point.x * 1000}
+                        cy={point.y * 600}
+                        r={isSelected ? 16 : 9}
+                        fill={isSelected ? "#f59e0b" : "#0876db"}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          setSelected({
+                            kind: "point",
+                            strokeIndex,
+                            index: pointIndex,
+                          });
+                          setDragging(true);
+                          event.currentTarget.setPointerCapture(
+                            event.pointerId,
+                          );
+                        }}
+                      />
+                    );
+                  });
+                })}
               {elements.map((el) => (
                 <g
                   key={el.id}
@@ -1976,21 +2549,54 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     <circle
                       r="18"
                       fill="#7a3fe0"
-                      stroke={selected?.kind === "element" && selected.id === el.id ? "#f59e0b" : "#0876db"}
+                      stroke={
+                        selected?.kind === "element" && selected.id === el.id
+                          ? "#f59e0b"
+                          : "#0876db"
+                      }
                       strokeWidth="4"
                     />
                   )}
                   {el.type === "door" && (
                     <g transform={`rotate(${el.direction || 0})`}>
-                      <circle r="5" fill="#0876db" />
-                      <line x1="0" y1="0" x2="48" y2="0" stroke="#163b59" strokeWidth="6" />
-                      <path d="M 0 48 A 48 48 0 0 0 48 0" fill="none" stroke="#0876db" strokeWidth="3" />
+                      <g transform={el.flipped ? "scale(1 -1)" : undefined}>
+                        <circle r="5" fill="#0876db" />
+                        <line
+                          x1="0"
+                          y1="0"
+                          x2="48"
+                          y2="0"
+                          stroke="#163b59"
+                          strokeWidth="6"
+                        />
+                        <path
+                          d="M 0 48 A 48 48 0 0 0 48 0"
+                          fill="none"
+                          stroke="#0876db"
+                          strokeWidth="3"
+                        />
+                      </g>
                     </g>
                   )}
                   {el.type === "window" && (
                     <g transform={`rotate(${el.direction || 0})`}>
-                      <rect x="-34" y="-10" width="68" height="20" fill="#fff" stroke="#163b59" strokeWidth="5" />
-                      <line x1="-30" y1="0" x2="30" y2="0" stroke="#60aee8" strokeWidth="4" />
+                      <rect
+                        x="-34"
+                        y="-10"
+                        width="68"
+                        height="20"
+                        fill="#fff"
+                        stroke="#163b59"
+                        strokeWidth="5"
+                      />
+                      <line
+                        x1="-30"
+                        y1="0"
+                        x2="30"
+                        y2="0"
+                        stroke="#60aee8"
+                        strokeWidth="4"
+                      />
                     </g>
                   )}
                   <text x="25" y="6" style={{ pointerEvents: "none" }}>
@@ -2010,25 +2616,109 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
         <aside className="card aside">
           <h2>Ferramentas da planta</h2>
           <div className="actions" style={{ flexWrap: "wrap" }}>
-            {(["wall", "door", "window", "camera", "measure", "text"] as const).map(
-              (x) => (
-                <button
-                  key={x}
-                  className={`btn ${mode === x ? "primary" : ""}`}
-                  onClick={() => {
-                    setMode(x);
-                    setMeasurementStart(null);
-                    setMeasurementPreview(null);
-                  }}
-                >
-                  {x === "wall" ? "mão livre" : x === "measure" ? "medida" : x === "text" ? "texto" : x}
-                </button>
-              ),
-            )}
+            {(
+              [
+                "wall",
+                "point",
+                "curve",
+                "door",
+                "window",
+                "camera",
+                "measure",
+                "text",
+              ] as const
+            ).map((x) => (
+              <button
+                key={x}
+                className={`btn ${mode === x ? "primary" : ""}`}
+                onClick={() => {
+                  setMode(x);
+                  setMeasurementStart(null);
+                  setMeasurementPreview(null);
+                }}
+              >
+                {x === "wall"
+                  ? "Desenhar paredes"
+                  : x === "point"
+                    ? "Adicionar ponto"
+                    : x === "curve"
+                      ? "Curva suave"
+                      : x === "measure"
+                        ? "medida"
+                        : x === "text"
+                          ? "texto"
+                          : x}
+              </button>
+            ))}
           </div>
+          {selectedElement &&
+            ["door", "window"].includes(selectedElement.type) && (
+              <div
+                className="element-controls"
+                role="group"
+                aria-label={`Controles da ${selectedElement.type === "door" ? "porta" : "janela"}`}
+              >
+                <strong>
+                  {selectedElement.type === "door"
+                    ? "Porta selecionada"
+                    : "Janela selecionada"}
+                </strong>
+                <button
+                  className="btn primary"
+                  disabled={confirmed}
+                  onClick={() =>
+                    setElements((items) =>
+                      items.map((item) =>
+                        item.id === selectedElement.id
+                          ? {
+                              ...item,
+                              direction: ((item.direction || 0) + 90) % 360,
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                >
+                  Girar 90°
+                </button>
+                {selectedElement.type === "door" && (
+                  <button
+                    className="btn"
+                    disabled={confirmed}
+                    onClick={() =>
+                      setElements((items) =>
+                        items.map((item) =>
+                          item.id === selectedElement.id
+                            ? { ...item, flipped: !item.flipped }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    Inverter lado da abertura
+                  </button>
+                )}
+                <small>
+                  Toque na porta ou janela para mostrar estes controles.
+                </small>
+              </div>
+            )}
           {mode === "wall" && (
             <p className="subtitle">
-              Pressione e arraste o dedo, mouse ou caneta para desenhar cada parede à mão livre.
+              Desenhe continuamente. Cada trecho fica reto e toda mudança de
+              direção cria uma quina.
+            </p>
+          )}
+          {mode === "point" && (
+            <p className="subtitle">
+              Toque perto de uma parede para inserir um ponto; depois arraste
+              esse ponto para formar a quina desejada.
+            </p>
+          )}
+          {mode === "curve" && (
+            <p className="subtitle">
+              Arraste acompanhando o formato desejado; o traço será suavizado e
+              preservado como curva.
             </p>
           )}
           {mode === "measure" && (
@@ -2040,15 +2730,24 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
           )}
           {mode === "text" && (
             <p className="subtitle">
-              Clique na planta, digite o texto e depois arraste-o para qualquer posição.
+              Clique na planta, digite o texto e depois arraste-o para qualquer
+              posição.
             </p>
           )}
           <button
             className="btn"
             disabled={!strokes.length || confirmed}
-            onClick={() => setStrokes((items) => items.map((stroke) => rectifyPath(stroke)))}
+            onClick={() =>
+              setStrokes((items) =>
+                items.map((stroke, index) =>
+                  strokeKinds[index] === "curve"
+                    ? stroke
+                    : polylineStroke(stroke),
+                ),
+              )
+            }
           >
-            Retificar traços
+            Ajustar retas e quinas
           </button>
           <button
             className="btn"
@@ -2086,7 +2785,26 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                   )
                 }
               >
-                Girar porta ou janela
+                Girar 90°
+              </button>
+            )}
+          {selected?.kind === "element" &&
+            elements.find((item) => item.id === selected.id)?.type ===
+              "door" && (
+              <button
+                className="btn"
+                disabled={confirmed}
+                onClick={() =>
+                  setElements((items) =>
+                    items.map((item) =>
+                      item.id === selected.id
+                        ? { ...item, flipped: !item.flipped }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                Inverter abertura da porta
               </button>
             )}
           {selected?.kind === "measurement" && (
@@ -2127,16 +2845,22 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               <span>Texto livre da planta</span>
               <input
                 disabled={confirmed}
-                value={texts.find((item) => item.id === selected.id)?.value || ""}
+                value={
+                  texts.find((item) => item.id === selected.id)?.value || ""
+                }
                 onChange={(event) =>
                   setTexts((items) =>
                     items.map((item) =>
-                      item.id === selected.id ? { ...item, value: event.target.value } : item,
+                      item.id === selected.id
+                        ? { ...item, value: event.target.value }
+                        : item,
                     ),
                   )
                 }
               />
-              <small>Arraste o texto diretamente na planta para reposicioná-lo.</small>
+              <small>
+                Arraste o texto diretamente na planta para reposicioná-lo.
+              </small>
             </label>
           )}
           {selected?.kind === "element" &&
@@ -2406,8 +3130,12 @@ function Portal({
       const form = new FormData();
       form.set("snapshot", JSON.stringify(snapshot));
       form.set("pdf", await pdf(project, false), "medidas-finais.pdf");
+      const { data: authData } = await getSupabase().auth.getSession();
+      if (!authData.session?.access_token)
+        throw new Error("Sessão expirada; entre novamente.");
       const response = await fetch("/api/publications", {
         method: "POST",
+        headers: { authorization: `Bearer ${authData.session.access_token}` },
         body: form,
       });
       if (!response.ok) throw new Error("Não foi possível publicar");
@@ -2525,7 +3253,8 @@ function SettingsPanel() {
       <section className="card" style={{ maxWidth: 720 }}>
         <h2>Conta conectada</h2>
         <p className="subtitle">
-          Os dados operacionais continuam salvos localmente para uso sem internet.
+          Os dados operacionais continuam salvos localmente para uso sem
+          internet.
         </p>
         <button className="btn danger" disabled={leaving} onClick={signOut}>
           {leaving ? "Saindo…" : "Sair da conta"}
@@ -2628,7 +3357,9 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
       const box = { x: 24, y: 40, w: 240, h: 132 };
       d.setLineWidth(1.2);
       d.setDrawColor(22, 59, 89);
-      const drawingStrokes = plan.strokes?.length ? plan.strokes : [plan.points];
+      const drawingStrokes = plan.strokes?.length
+        ? plan.strokes
+        : [plan.points];
       drawingStrokes.forEach((stroke, strokeIndex) => {
         stroke.slice(1).forEach((point, index) => {
           const previous = stroke[index];
@@ -2643,12 +3374,17 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
         if (middle) {
           d.setFontSize(8);
           d.setTextColor(7, 93, 169);
-          const kind = classifyStroke(stroke) === "straight"
-            ? "Reta"
-            : classifyStroke(stroke) === "curve"
-              ? "Curva"
-              : "Misto";
-          d.text(`${kind} ${wallCode(strokeIndex)}`, box.x + middle.x * box.w, box.y + middle.y * box.h - 2);
+          const kind =
+            plan.strokeKinds?.[strokeIndex] !== "curve"
+              ? "Reta"
+              : classifyStroke(stroke) === "curve"
+                ? "Curva"
+                : "Misto";
+          d.text(
+            `${kind} ${wallCode(strokeIndex)}`,
+            box.x + middle.x * box.w,
+            box.y + middle.y * box.h - 2,
+          );
         }
       });
       plan.elements.forEach((element) => {
@@ -2692,7 +3428,11 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
       (plan.texts || []).forEach((item) => {
         d.setTextColor(23, 37, 52);
         d.setFontSize(9);
-        d.text(item.value, box.x + item.point.x * box.w, box.y + item.point.y * box.h);
+        d.text(
+          item.value,
+          box.x + item.point.x * box.w,
+          box.y + item.point.y * box.h,
+        );
       });
     }
     footer();
@@ -2744,14 +3484,18 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
         .filter((annotation) => annotation.state !== "hidden")
         .forEach((annotation) => {
           if (
-            (annotation.type === "text" || annotation.type === "technical" || annotation.type === "detail") &&
+            (annotation.type === "text" ||
+              annotation.type === "technical" ||
+              annotation.type === "detail") &&
             annotation.points[0]
           ) {
             const point = annotation.labelPoint || annotation.points[0];
             d.setTextColor(23, 37, 52);
             d.setFontSize(8);
             d.text(
-              annotation.type === "text" ? annotation.value : annotation.description,
+              annotation.type === "text"
+                ? annotation.value
+                : annotation.description,
               x + point.x * width,
               y + point.y * height,
             );

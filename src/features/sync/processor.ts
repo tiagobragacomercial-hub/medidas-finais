@@ -1,5 +1,6 @@
 import type { SyncOperation } from "../../types/models";
 import { db } from "../../database/local/db.ts";
+import { getSupabase } from "../../database/remote/supabase.ts";
 
 export type SyncEnvelope = {
   operationId: string;
@@ -99,6 +100,8 @@ export async function syncPending(transport: SyncTransport): Promise<{
 
 export const httpSyncTransport: SyncTransport = async (envelope) => {
   let body: BodyInit, headers: HeadersInit | undefined;
+  const { data } = await getSupabase().auth.getSession();
+  if (!data.session?.access_token) throw new Error("Sessão expirada; entre novamente.");
   if (envelope.entity === "photo") {
     const photo = await db.photos.get(envelope.entityId);
     if (!photo) throw new Error("Foto local não encontrada");
@@ -107,10 +110,15 @@ export const httpSyncTransport: SyncTransport = async (envelope) => {
     form.set("file", photo.blob, photo.name);
     body = form;
   } else {
-    headers = { "content-type": "application/json" };
+    headers = { "content-type": "application/json", authorization: `Bearer ${data.session.access_token}` };
     body = JSON.stringify(envelope);
   }
-  const response = await fetch("/api/sync", { method: "POST", headers, body });
+  if (body instanceof FormData) body.set("accessToken", data.session.access_token);
+  const response = await fetch("/api/sync", {
+    method: "POST",
+    headers: body instanceof FormData ? { authorization: `Bearer ${data.session.access_token}` } : headers,
+    body,
+  });
   if (!response.ok)
     throw new Error(`Falha de sincronização (${response.status})`);
   const result = (await response.json()) as { accepted?: boolean };

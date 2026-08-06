@@ -83,6 +83,35 @@ export function processFreehandStroke(source: Point[]): Point[] {
   return simplify(smoothed, 0.0035);
 }
 
+export function straightenStroke(source: Point[]): Point[] {
+  const points = withoutNearDuplicates(source);
+  if (points.length < 2) return points;
+  const start = points[0], rawEnd = points[points.length - 1],
+    dx = rawEnd.x - start.x, dy = rawEnd.y - start.y,
+    angle = Math.abs(Math.atan2(dy, dx));
+  if (angle < Math.PI / 18 || angle > Math.PI - Math.PI / 18)
+    return [start, { x: rawEnd.x, y: start.y }];
+  if (Math.abs(angle - Math.PI / 2) < Math.PI / 18)
+    return [start, { x: start.x, y: rawEnd.y }];
+  return [start, rawEnd];
+}
+
+export function polylineStroke(source: Point[]): Point[] {
+  const points = withoutNearDuplicates(source);
+  if (points.length < 3) return straightenStroke(points);
+  const corners = simplify(points, 0.032);
+  return corners.map((point, index) => {
+    if (!index) return point;
+    const previous = corners[index - 1], dx = point.x - previous.x, dy = point.y - previous.y,
+      angle = Math.abs(Math.atan2(dy, dx));
+    if (angle < Math.PI / 18 || angle > Math.PI - Math.PI / 18)
+      return { x: point.x, y: previous.y };
+    if (Math.abs(angle - Math.PI / 2) < Math.PI / 18)
+      return { x: previous.x, y: point.y };
+    return point;
+  });
+}
+
 export function rectifyPath(points: Point[]): Point[] {
   return processFreehandStroke(points);
 }
@@ -92,6 +121,11 @@ export function strokePath(points: Point[]): string {
   if (points.length === 1) return `M ${points[0].x * 1000} ${points[0].y * 600}`;
   if (classifyStroke(points) === "straight")
     return `M ${points[0].x * 1000} ${points[0].y * 600} L ${points[points.length - 1].x * 1000} ${points[points.length - 1].y * 600}`;
+  if (classifyStroke(points) === "mixed")
+    return points.slice(1).reduce(
+      (path, point) => `${path} L ${point.x * 1000} ${point.y * 600}`,
+      `M ${points[0].x * 1000} ${points[0].y * 600}`,
+    );
   let path = `M ${points[0].x * 1000} ${points[0].y * 600}`;
   for (let index = 1; index < points.length - 1; index += 1) {
     const point = points[index], next = points[index + 1],
@@ -101,6 +135,14 @@ export function strokePath(points: Point[]): string {
   }
   const last = points[points.length - 1];
   return `${path} T ${last.x * 1000} ${last.y * 600}`;
+}
+
+export function polylinePath(points: Point[]): string {
+  if (!points.length) return "";
+  return points.slice(1).reduce(
+    (path, point) => `${path} L ${point.x * 1000} ${point.y * 600}`,
+    `M ${points[0].x * 1000} ${points[0].y * 600}`,
+  );
 }
 
 export const wallCode = (index: number) => {

@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import NetInfo from "@react-native-community/netinfo";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ import {
   pendingCount,
 } from "./src/database";
 import { supabase, supabaseConfigured } from "./src/supabase";
+import { synchronize } from "./src/sync";
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -94,6 +95,9 @@ function Workspace({ userEmail }: { userEmail: string }) {
   const [online, setOnline] = useState(false);
   const [clientName, setClientName] = useState("");
   const [projectName, setProjectName] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
+  const syncInFlight = useRef(false);
 
   const reload = useCallback(async () => {
     const [nextClients, nextProjects, nextPending] = await Promise.all([
@@ -106,10 +110,31 @@ function Workspace({ userEmail }: { userEmail: string }) {
     setPending(nextPending);
   }, []);
 
+  const runSync = useCallback(async () => {
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
+    setSyncing(true);
+    setSyncError("");
+    try {
+      await synchronize(supabase);
+      await reload();
+    } catch {
+      setSyncError("Não foi possível sincronizar agora. Os dados continuam protegidos neste aparelho.");
+      await reload();
+    } finally {
+      syncInFlight.current = false;
+      setSyncing(false);
+    }
+  }, [reload]);
+
   useEffect(() => {
     void reload();
-    return NetInfo.addEventListener((state) => setOnline(Boolean(state.isConnected)));
-  }, [reload]);
+    return NetInfo.addEventListener((state) => {
+      const connected = Boolean(state.isConnected && state.isInternetReachable !== false);
+      setOnline(connected);
+      if (connected) void runSync();
+    });
+  }, [reload, runSync]);
 
   async function addClient() {
     if (!clientName.trim()) return;
@@ -131,7 +156,7 @@ function Workspace({ userEmail }: { userEmail: string }) {
       <View style={styles.header}>
         <View>
           <Text style={styles.brand}>Medidas Finais</Text>
-          <Text style={styles.headerText}>{online ? "Online" : "Sem internet — dados protegidos"}</Text>
+          <Text style={styles.headerText}>{online ? (syncing ? "Sincronizando…" : "Online") : "Sem internet — dados protegidos"}</Text>
         </View>
         <View style={styles.pending}><Text style={styles.pendingText}>{pending} pendentes</Text></View>
       </View>
@@ -139,6 +164,8 @@ function Workspace({ userEmail }: { userEmail: string }) {
         <Text style={styles.eyebrow}>OPERAÇÃO MÓVEL</Text>
         <Text style={styles.heading}>Bom trabalho</Text>
         <Text style={styles.muted}>Tudo nesta tela é salvo primeiro no SQLite deste aparelho.</Text>
+        {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
+        {online && pending > 0 ? <Action label={syncing ? "Sincronizando…" : "Sincronizar agora"} onPress={runSync} disabled={syncing} /> : null}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Novo cliente</Text>
@@ -163,7 +190,7 @@ function Workspace({ userEmail }: { userEmail: string }) {
             renderItem={({ item }) => (
               <View style={styles.row}>
                 <View><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.muted}>Salvo neste aparelho</Text></View>
-                <Text style={styles.status}>Pendente</Text>
+                <Text style={styles.status}>{item.sync_status === "SINCRONIZADO" ? "Sincronizado" : "Pendente"}</Text>
               </View>
             )}
           />
@@ -224,4 +251,5 @@ const styles = StyleSheet.create({
   secondaryText: { color: "#ba3341", fontWeight: "800" },
   loading: { flex: 1, backgroundColor: "#092c4c", alignItems: "center", justifyContent: "center", gap: 14 },
   loadingText: { color: "white" },
+  syncError: { color: "#9b2c2c", backgroundColor: "#fff0f0", padding: 12, borderRadius: 10 },
 });

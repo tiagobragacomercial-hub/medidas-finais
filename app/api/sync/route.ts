@@ -1,4 +1,4 @@
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getApiUser } from "../../../src/server/api-user";
 
 type Envelope = {
   operationId: string;
@@ -17,7 +17,7 @@ function validEnvelope(value: unknown): value is Envelope {
 }
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getApiUser(request);
   if (!user) return Response.json({ error: "Não autorizado" }, { status: 401 });
   let envelope: unknown,
     file: File | null = null;

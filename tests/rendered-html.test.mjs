@@ -68,9 +68,11 @@ test("medidas e textos possuem posicionamento manual independente", async () => 
     readFile(new URL("../src/features/photos/export-png.ts", import.meta.url), "utf8"),
   ]);
   assert.match(models, /labelPoint\?: Point/);
+  assert.match(models, /descriptionPoint\?: Point/);
   assert.match(models, /interface FloorPlanText/);
   assert.match(app, /Mover ponto inicial/);
   assert.match(app, /Mover ponto final/);
+  assert.match(app, /startDrag\("description"\)/);
   assert.match(app, /Digite o texto que ficará na planta/);
   assert.match(exporter, /a\.labelPoint \|\|/);
 });
@@ -83,9 +85,15 @@ test("planta aceita traços contínuos e componentes de porta e janela", async (
   assert.match(models, /strokes\?: Point\[\]\[\]/);
   assert.match(app, /setDrawingStroke\(true\)/);
   assert.match(app, /strokeLinecap="round"/);
-  assert.match(app, /Retificar traços/);
+  assert.match(app, /Ajustar retas e quinas/);
+  assert.match(app, /"wall", "point", "curve"/);
+  assert.match(app, /mode === "curve" \? processFreehandStroke\(stroke\) : polylineStroke\(stroke\)/);
+  assert.match(app, /Adicionar ponto/);
   assert.match(app, /A 48 48/);
   assert.match(app, /el\.type === "window"/);
+  assert.match(app, /floor-grid-large/);
+  assert.match(app, /Inverter abertura da porta/);
+  assert.match(app, /Girar 90°/);
 });
 
 test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () => {
@@ -100,6 +108,13 @@ test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () 
   assert.match(app, /<video/);
 });
 
+test("editor permite fotografar diretamente com a câmera traseira", async () => {
+  const app = await readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8");
+  assert.match(app, /capture="environment"/);
+  assert.match(app, /Tirar foto/);
+  assert.match(app, /Importar da galeria/);
+});
+
 test("traços não bloqueiam o início de outra medida", async () => {
   const app = await readFile(
     new URL("../src/components/MedidasApp.tsx", import.meta.url),
@@ -109,7 +124,7 @@ test("traços não bloqueiam o início de outra medida", async () => {
   assert.match(app, /pointerEvents: "none"/);
   assert.match(app, /pointerEvents="none"/);
   assert.match(app, /selectedMeasurement && mode !== "measure"/);
-  assert.match(app, /mode === "wall" && strokes\.flatMap/);
+  assert.match(app, /\(mode === "wall" \|\| mode === "curve" \|\| mode === "point"\) && strokes\.flatMap/);
 });
 
 test("medida mostra prévia entre os pontos e solicita o número por último", async () => {

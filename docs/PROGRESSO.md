@@ -1,5 +1,10 @@
 # Progresso
 
+- Fluxo web de novo projeto simplificado: campos com contraste explícito, rótulo “Nome do projeto”, primeiro ambiente criado no mesmo formulário e abertura automática do editor após a gravação transacional de projeto, ambiente e respectivas filas de sincronização.
+- Verificação do fluxo simplificado: lint, TypeScript, 13 testes unitários, 4 de integração, build e 6 E2E aprovados; publicação atualizada em produção.
+- Sincronização móvel inicial implementada para clientes e projetos: identifica a organização autorizada, processa a fila SQLite ao reconectar, usa recibos remotos idempotentes, aplica repetição com espera progressiva, preserva erros localmente e importa registros do Supabase sem sobrescrever entidades locais pendentes.
+- Verificação desta etapa móvel: TypeScript e lint aprovados. Teste real em aparelho, interrupção de rede e cobertura das demais entidades continuam bloqueantes; o APK de prévia não deve ser tratado como versão final.
+
 - Fase atual: Fase 8 — Refinamento e produção.
 - Implementado: Fundação, MVP local e motor inicial de marcações completas.
 - Verificação pendente: Fases 0–2 precisam completar teste manual antes de serem novamente marcadas como concluídas.

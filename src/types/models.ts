@@ -55,6 +55,7 @@ export interface Annotation {
   state: "protected" | "editing" | "hidden";
   points: Point[];
   labelPoint?: Point;
+  descriptionPoint?: Point;
   value: string;
   secondaryValue?: string;
   textPosition: "between" | "above" | "below" | "left" | "right" | "free";
@@ -111,6 +112,7 @@ export interface FloorPlanElement {
   x: number;
   y: number;
   direction?: number;
+  flipped?: boolean;
   photoId?: string;
 }
 export interface FloorPlanMeasurement {
@@ -131,6 +133,7 @@ export interface FloorPlanRecord {
   environmentId: string;
   points: Point[];
   strokes?: Point[][];
+  strokeKinds?: Array<"polyline" | "curve">;
   elements: FloorPlanElement[];
   measurements?: FloorPlanMeasurement[];
   texts?: FloorPlanText[];

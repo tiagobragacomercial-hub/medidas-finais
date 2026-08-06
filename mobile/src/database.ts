@@ -27,6 +27,14 @@ export type Project = {
   updated_at: string;
 };
 
+export type PendingOperation = {
+  id: string;
+  entity: "client" | "project";
+  entity_id: string;
+  operation: "create" | "update" | "delete";
+  attempts: number;
+};
+
 const databasePromise = SQLite.openDatabaseAsync("medidas-finais.sqlite");
 
 const migrations = [
@@ -85,6 +93,7 @@ const migrations = [
     DELETE FROM projects;
     DELETE FROM clients;
   `,
+  `CREATE INDEX IF NOT EXISTS idx_sync_queue_due ON sync_queue(status, next_attempt_at, created_at);`,
 ];
 
 export async function initializeDatabase() {
@@ -202,4 +211,109 @@ export async function pendingCount() {
     "SELECT COUNT(*) AS total FROM sync_queue WHERE status != 'SINCRONIZADO'",
   );
   return result?.total ?? 0;
+}
+
+export async function getSetting(key: string) {
+  const database = await databasePromise;
+  const row = await database.getFirstAsync<{ value: string }>("SELECT value FROM app_settings WHERE key = ?", key);
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string) {
+  const database = await databasePromise;
+  await database.runAsync(
+    `INSERT INTO app_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+    key, value,
+  );
+}
+
+export async function nextPendingOperation(): Promise<PendingOperation | null> {
+  const database = await databasePromise;
+  return database.getFirstAsync<PendingOperation>(
+    `SELECT id,entity,entity_id,operation,attempts FROM sync_queue
+     WHERE status IN ('AGUARDANDO_SINCRONIZACAO','ERRO_DE_SINCRONIZACAO')
+       AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+     ORDER BY created_at LIMIT 1`, timestamp(),
+  );
+}
+
+export async function readSyncEntity(operation: PendingOperation) {
+  const database = await databasePromise;
+  const table = operation.entity === "client" ? "clients" : "projects";
+  return database.getFirstAsync<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id = ?`, operation.entity_id);
+}
+
+export async function markOperationSyncing(operation: PendingOperation) {
+  const database = await databasePromise;
+  const now = timestamp(), table = operation.entity === "client" ? "clients" : "projects";
+  await database.withTransactionAsync(async () => {
+    await database.runAsync("UPDATE sync_queue SET status='SINCRONIZANDO',updated_at=? WHERE id=?", now, operation.id);
+    await database.runAsync(`UPDATE ${table} SET sync_status='SINCRONIZANDO' WHERE id=?`, operation.entity_id);
+  });
+}
+
+export async function markOperationComplete(operation: PendingOperation) {
+  const database = await databasePromise;
+  const now = timestamp(), table = operation.entity === "client" ? "clients" : "projects";
+  await database.withTransactionAsync(async () => {
+    await database.runAsync(
+      "UPDATE sync_queue SET status='SINCRONIZADO',last_error=NULL,next_attempt_at=NULL,updated_at=? WHERE id=?", now, operation.id,
+    );
+    const remaining = await database.getFirstAsync<{ total: number }>(
+      `SELECT COUNT(*) AS total FROM sync_queue WHERE entity=? AND entity_id=? AND status!='SINCRONIZADO'`,
+      operation.entity, operation.entity_id,
+    );
+    if ((remaining?.total ?? 0) === 0) {
+      await database.runAsync(`UPDATE ${table} SET sync_status='SINCRONIZADO',last_sync_at=? WHERE id=?`, now, operation.entity_id);
+    }
+  });
+}
+
+export async function markOperationFailed(operation: PendingOperation, error: string) {
+  const database = await databasePromise;
+  const now = new Date(), attempts = operation.attempts + 1;
+  const nextAttempt = new Date(now.getTime() + Math.min(300, 2 ** Math.min(attempts, 8)) * 1000).toISOString();
+  const table = operation.entity === "client" ? "clients" : "projects";
+  await database.withTransactionAsync(async () => {
+    await database.runAsync(
+      `UPDATE sync_queue SET status='ERRO_DE_SINCRONIZACAO',attempts=?,next_attempt_at=?,last_error=?,updated_at=? WHERE id=?`,
+      attempts, nextAttempt, error.slice(0, 500), now.toISOString(), operation.id,
+    );
+    await database.runAsync(`UPDATE ${table} SET sync_status='ERRO_DE_SINCRONIZACAO' WHERE id=?`, operation.entity_id);
+  });
+}
+
+export async function mergeRemoteClients(rows: Array<Record<string, unknown>>) {
+  const database = await databasePromise;
+  await database.withTransactionAsync(async () => {
+    for (const row of rows) {
+      const local = await database.getFirstAsync<{ sync_status: SyncStatus }>("SELECT sync_status FROM clients WHERE id=?", String(row.id));
+      if (local && local.sync_status !== "SINCRONIZADO") continue;
+      await database.runAsync(
+        `INSERT INTO clients(id,name,phone,email,created_at,updated_at,version,sync_status,device_id,deleted_at,last_sync_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,phone=excluded.phone,email=excluded.email,
+         updated_at=excluded.updated_at,version=excluded.version,deleted_at=excluded.deleted_at,sync_status='SINCRONIZADO',last_sync_at=excluded.last_sync_at`,
+        String(row.id), String(row.name), String(row.phone ?? ""), String(row.email ?? ""), String(row.created_at), String(row.updated_at),
+        Number(row.version ?? 1), "SINCRONIZADO", String(row.device_id ?? "remote"), row.deleted_at ? String(row.deleted_at) : null, timestamp(),
+      );
+    }
+  });
+}
+
+export async function mergeRemoteProjects(rows: Array<Record<string, unknown>>) {
+  const database = await databasePromise;
+  await database.withTransactionAsync(async () => {
+    for (const row of rows) {
+      const local = await database.getFirstAsync<{ sync_status: SyncStatus }>("SELECT sync_status FROM projects WHERE id=?", String(row.id));
+      if (local && local.sync_status !== "SINCRONIZADO") continue;
+      await database.runAsync(
+        `INSERT INTO projects(id,client_id,name,address,unit,created_at,updated_at,version,sync_status,device_id,deleted_at,last_sync_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET client_id=excluded.client_id,name=excluded.name,address=excluded.address,
+         unit=excluded.unit,updated_at=excluded.updated_at,version=excluded.version,deleted_at=excluded.deleted_at,sync_status='SINCRONIZADO',last_sync_at=excluded.last_sync_at`,
+        String(row.id), String(row.client_id), String(row.name), String(row.address ?? ""), String(row.unit ?? "mm"), String(row.created_at),
+        String(row.updated_at), Number(row.version ?? 1), "SINCRONIZADO", String(row.device_id ?? "remote"),
+        row.deleted_at ? String(row.deleted_at) : null, timestamp(),
+      );
+    }
+  });
 }

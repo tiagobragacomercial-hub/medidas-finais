@@ -1,4 +1,4 @@
-import { getChatGPTUser } from "../../chatgpt-auth";
+import { getApiUser } from "../../../src/server/api-user";
 import { bindings, sha256 } from "../../../src/server/portal";
 
 const secret = (bytes: number) => {
@@ -10,7 +10,7 @@ const secret = (bytes: number) => {
 };
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getApiUser(request);
   if (!user) return Response.json({ error: "Não autorizado" }, { status: 401 });
   const form = await request.formData(),
     snapshot = form.get("snapshot"),
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getApiUser(request);
   if (!user) return Response.json({ error: "Não autorizado" }, { status: 401 });
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "ID obrigatório" }, { status: 400 });

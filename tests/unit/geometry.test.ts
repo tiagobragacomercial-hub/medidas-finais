@@ -8,7 +8,10 @@ import {
 import {
   classifyStroke,
   processFreehandStroke,
+  polylineStroke,
+  polylinePath,
   rectifyPath,
+  straightenStroke,
   strokePath,
   wallCode,
 } from "../../src/features/floor-plan/geometry.ts";
@@ -39,6 +42,28 @@ test("reta desenhada à mão é retificada automaticamente", () => {
   ]);
   assert.deepEqual(rectifyPath(source), result);
   assert.match(strokePath(result), / L /);
+});
+
+test("ferramenta de parede sempre converte o gesto torto em uma única reta", () => {
+  const source = [
+    { x: 0.1, y: 0.8 },
+    { x: 0.25, y: 0.35 },
+    { x: 0.5, y: 0.65 },
+    { x: 0.9, y: 0.2 },
+  ];
+  assert.deepEqual(straightenStroke(source), [source[0], source[3]]);
+});
+
+test("desenho contínuo transforma mudança de direção em segmentos retos com quina", () => {
+  const source = [
+    { x: 0.1, y: 0.2 },
+    { x: 0.45, y: 0.205 },
+    { x: 0.5, y: 0.5 },
+    { x: 0.505, y: 0.85 },
+  ];
+  const result = polylineStroke(source);
+  assert.ok(result.length >= 3);
+  assert.match(polylinePath(result), / L .* L /);
 });
 
 test("curva é identificada e preservada com múltiplos pontos", () => {

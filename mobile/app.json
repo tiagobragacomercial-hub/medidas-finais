@@ -10,13 +10,17 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.medidasfinais.preview",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,6 +35,12 @@
           "cameraPermission": "Permitir o uso da câmera para fotografar os ambientes medidos."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e2ac97ca-0ba5-4c1b-a69a-3b602cd5c85a"
+      }
+    },
+    "owner": "tiagobraga.comercial"
   }
 }
