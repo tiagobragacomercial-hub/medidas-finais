@@ -398,14 +398,11 @@ export function MedidasApp() {
           preferredClientId={preferredClientId}
           preferredProjectId={selectedProjectId}
           close={() => setModal(null)}
-          saved={({ type, id, projectId, environmentId }) => {
+          saved={({ type, id, environmentId }) => {
             setToast("Salvo neste dispositivo");
             if (type === "client") {
               setPreferredClientId(id);
-              setModal(null);
-              if (projectId) setSelectedProjectId(projectId);
-              setSelectedEnvironmentId(environmentId || "");
-              setSection("floorplan");
+              setModal("project");
             } else if (type === "project") {
               setModal(null);
               setSelectedProjectId(id);
@@ -750,7 +747,6 @@ function Modal({
   saved: (result: {
     type: "client" | "project" | "environment";
     id: string;
-    projectId?: string;
     environmentId?: string;
   }) => void;
 }) {
@@ -759,90 +755,19 @@ function Modal({
     e.preventDefault();
     const f = new FormData(ref.current!),
       id = uid();
-    if (type === "client") {
-      const clientId = id;
-      const projectId = uid();
-      const clientName = String(f.get("name") || "").trim();
-      const address = String(f.get("address") || "").trim();
-      const selectedEnvironmentTypes = f
-        .getAll("envTypes")
-        .map((item) => String(item).trim())
-        .filter(Boolean);
-      const customEnvironmentNames = String(f.get("customEnvironments") || "")
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const environmentNames = Array.from(
-        new Set([...selectedEnvironmentTypes, ...customEnvironmentNames]),
-      );
-
-      if (!environmentNames.length) {
-        window.alert(
-          "Selecione pelo menos um ambiente para iniciar o levantamento.",
-        );
-        return;
-      }
-
-      const environmentRecords: Environment[] = environmentNames.map(
-        (name) => ({
-          id: uid(),
-          projectId,
-          name,
-          type: name,
-          status: "active",
-        }),
-      );
-
-      await db.transaction(
-        "rw",
-        db.clients,
-        db.projects,
-        db.environments,
-        db.syncOperations,
-        async () => {
-          await db.clients.put({
-            id: clientId,
-            name: clientName,
-            phone: String(f.get("phone") || "").trim(),
-            email: String(f.get("email") || "").trim(),
-            address,
-            notes: String(f.get("notes") || "").trim(),
-            status: "active",
-            createdAt: now(),
-            updatedAt: now(),
-          });
-
-          await db.projects.put({
-            id: projectId,
-            clientId,
-            name: clientName,
-            address,
-            responsible: String(f.get("responsible") || "").trim(),
-            unit: (f.get("unit") || "mm") as Project["unit"],
-            status: "draft",
-            version: 1,
-            createdAt: now(),
-            updatedAt: now(),
-          });
-
-          for (const environment of environmentRecords)
-            await db.environments.put(environment);
-
-          await queue("client", clientId, "create");
-          await queue("project", projectId, "create");
-          for (const environment of environmentRecords)
-            await queue("environment", environment.id, "create");
-        },
-      );
-
-      saved({
-        type,
-        id: clientId,
-        projectId,
-        environmentId: environmentRecords[0]?.id,
+    if (type === "client")
+      await db.clients.put({
+        id,
+        name: String(f.get("name")),
+        phone: String(f.get("phone") || ""),
+        email: String(f.get("email") || ""),
+        address: String(f.get("address") || ""),
+        notes: String(f.get("notes") || ""),
+        status: "active",
+        createdAt: now(),
+        updatedAt: now(),
       });
-      return;
-    } else if (type === "project") {
+    else if (type === "project") {
       const environmentId = uid();
       await db.transaction(
         "rw",
@@ -959,60 +884,6 @@ function Modal({
               <Field label="Endereço" full>
                 <input name="address" />
               </Field>
-              <Field label="Responsável pela medição">
-                <input
-                  name="responsible"
-                  required
-                  placeholder="Nome de quem fará o levantamento"
-                />
-              </Field>
-              <Field label="Unidade das medidas">
-                <select name="unit" defaultValue="mm">
-                  <option value="mm">Milímetros</option>
-                  <option value="cm">Centímetros</option>
-                  <option value="m">Metros</option>
-                </select>
-              </Field>
-              <Field label="Ambientes que serão medidos" full>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                    gap: 10,
-                    padding: 12,
-                    border: "1px solid var(--border, #d9e2ea)",
-                    borderRadius: 12,
-                  }}
-                >
-                  {types
-                    .filter((item) => item !== "Personalizado")
-                    .map((item) => (
-                      <label
-                        key={item}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          name="envTypes"
-                          value={item}
-                          style={{ width: 18, height: 18 }}
-                        />
-                        <span>{item}</span>
-                      </label>
-                    ))}
-                </div>
-              </Field>
-              <Field label="Outros ambientes" full>
-                <input
-                  name="customEnvironments"
-                  placeholder="Ex.: Dormitório 1, Dormitório 2, Closet"
-                />
-              </Field>
               <Field label="Observações internas" full>
                 <textarea name="notes" rows={3} />
               </Field>
@@ -1049,11 +920,9 @@ function Modal({
           </button>
           <button className="btn primary">
             <Save size={16} />
-            {type === "client"
-              ? "Salvar e iniciar levantamento"
-              : type === "project"
-                ? "Criar e iniciar projeto"
-                : "Salvar no dispositivo"}
+            {type === "project"
+              ? "Criar e iniciar projeto"
+              : "Salvar no dispositivo"}
           </button>
         </div>
       </form>
