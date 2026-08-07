@@ -403,29 +403,29 @@ export function MedidasApp() {
           preferredClientId={preferredClientId}
           preferredProjectId={selectedProjectId}
           close={() => setModal(null)}
-          saved={({ type, id, environmentId }) => {
+          saved={async ({ type, id, environmentId }) => {
             setToast("Salvo neste dispositivo");
             if (type === "client-project") {
-      const clientId = uid();
-      const projectId = uid();
-      const environmentId = uid();
-      const formData = new FormData(ref.current!);
-      const clientName = String(formData.get("clientName") || "").trim();
-      const projectName = String(formData.get("projectName") || "").trim();
-      const responsible = String(formData.get("responsible") || "").trim();
-      const unit = (formData.get("unit") || "mm") as Project["unit"];
-      const envType = String(formData.get("envType") || "Cozinha");
-      if (!clientName || !projectName) {
-        alert("Informe o nome do cliente e do projeto.");
-        return;
-      }
-      await db.transaction(
-        "rw",
-        db.clients,
-        db.projects,
-        db.environments,
-        db.syncOperations,
-        async () => {
+              const clientId = uid();
+              const projectId = uid();
+              const environmentId = uid();
+              const formData = new FormData(ref.current!);
+              const clientName = String(formData.get("clientName") || "").trim();
+              const projectName = String(formData.get("projectName") || "").trim();
+              const responsible = String(formData.get("responsible") || "").trim();
+              const unit = (formData.get("unit") || "mm") as Project["unit"];
+              const envType = String(formData.get("envType") || "Cozinha");
+              if (!clientName || !projectName) {
+                alert("Informe o nome do cliente e do projeto.");
+                return;
+              }
+              await db.transaction(
+                "rw",
+                db.clients,
+                db.projects,
+                db.environments,
+                db.syncOperations,
+                async () => {
           await db.clients.put({
             id: clientId,
             name: clientName,
