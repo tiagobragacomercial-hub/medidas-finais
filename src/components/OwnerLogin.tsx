@@ -12,6 +12,7 @@ import {
 export function OwnerLogin() {
   const router = useRouter();
   const ownerEmail = getOwnerLoginEmail();
+  const [email, setEmail] = useState(ownerEmail);
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,7 @@ export function OwnerLogin() {
     setLoading(true);
     window.localStorage.setItem("medidas-finais-manter-conectado", String(remember));
     const { error } = await getSupabase().auth.signInWithPassword({
-      email: ownerEmail,
+      email,
       password,
     });
     setLoading(false);
@@ -61,8 +62,8 @@ export function OwnerLogin() {
             id="owner-email"
             type="email"
             autoComplete="username"
-            value={ownerEmail}
-            readOnly
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
             required
           />
           <label htmlFor="owner-password">Senha</label>
