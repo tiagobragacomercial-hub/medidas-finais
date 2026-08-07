@@ -20,11 +20,16 @@ export function OwnerLogin() {
   const [remember, setRemember] = useState(true);
 
   useEffect(() => {
-    setRemember(window.localStorage.getItem("medidas-finais-manter-conectado") !== "false");
+    setRemember(
+      window.localStorage.getItem("medidas-finais-manter-conectado") !==
+        "false",
+    );
     if (!supabaseConfigured()) return;
-    void getSupabase().auth.getSession().then(({ data }) => {
-      if (data.session) router.replace("/admin");
-    });
+    void getSupabase()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (data.session) router.replace("/admin");
+      });
   }, [router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -36,7 +41,10 @@ export function OwnerLogin() {
     }
 
     setLoading(true);
-    window.localStorage.setItem("medidas-finais-manter-conectado", String(remember));
+    window.localStorage.setItem(
+      "medidas-finais-manter-conectado",
+      String(remember),
+    );
     const { error } = await getSupabase().auth.signInWithPassword({
       email,
       password,
@@ -44,7 +52,9 @@ export function OwnerLogin() {
     setLoading(false);
 
     if (error) {
-      setMessage("E-mail ou senha incorretos. Confira os dados e tente novamente.");
+      setMessage(
+        "E-mail ou senha incorretos. Confira os dados e tente novamente.",
+      );
       return;
     }
     router.replace("/admin");
