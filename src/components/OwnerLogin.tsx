@@ -3,11 +3,15 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
-import { getSupabase, supabaseConfigured } from "../database/remote/supabase";
+import {
+  getOwnerLoginEmail,
+  getSupabase,
+  supabaseConfigured,
+} from "../database/remote/supabase";
 
 export function OwnerLogin() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const ownerEmail = getOwnerLoginEmail();
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,7 +37,7 @@ export function OwnerLogin() {
     setLoading(true);
     window.localStorage.setItem("medidas-finais-manter-conectado", String(remember));
     const { error } = await getSupabase().auth.signInWithPassword({
-      email: email.trim(),
+      email: ownerEmail,
       password,
     });
     setLoading(false);
@@ -52,13 +56,13 @@ export function OwnerLogin() {
         <h1>Entrar no Medidas Finais</h1>
         <p className="subtitle">Use a conta autorizada da proprietária.</p>
         <form className="field" onSubmit={submit}>
-          <label htmlFor="owner-email">E-mail</label>
+          <label htmlFor="owner-email">E-mail de acesso</label>
           <input
             id="owner-email"
             type="email"
             autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            value={ownerEmail}
+            readOnly
             required
           />
           <label htmlFor="owner-password">Senha</label>

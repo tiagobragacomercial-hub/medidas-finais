@@ -66,6 +66,23 @@ test("desenho contínuo transforma mudança de direção em segmentos retos com 
   assert.match(polylinePath(result), / L .* L /);
 });
 
+test("gesto livre de parede é ortogonalizado em segmentos alinhados ao eixo", () => {
+  const source = [
+    { x: 0.1, y: 0.2 },
+    { x: 0.45, y: 0.55 },
+    { x: 0.8, y: 0.9 },
+  ];
+  const result = polylineStroke(source);
+  assert.ok(result.length >= 2);
+  assert.ok(
+    result.every((point, index) => {
+      if (!index) return true;
+      const previous = result[index - 1];
+      return previous.x === point.x || previous.y === point.y;
+    }),
+  );
+});
+
 test("curva é identificada e preservada com múltiplos pontos", () => {
   const curve = [
     { x: 0.1, y: 0.7 },

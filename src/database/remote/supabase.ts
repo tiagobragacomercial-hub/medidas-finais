@@ -30,6 +30,10 @@ export function supabaseConfigured() {
   );
 }
 
+export function getOwnerLoginEmail() {
+  return (process.env.NEXT_PUBLIC_OWNER_EMAIL || "proprietaria@medidasfinais.com").trim();
+}
+
 export function getSupabase(): SupabaseClient {
   if (client) return client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL,

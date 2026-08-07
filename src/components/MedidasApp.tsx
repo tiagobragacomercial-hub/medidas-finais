@@ -35,6 +35,11 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { exportAnnotatedPng } from "../features/photos/export-png";
+import {
+  getAnnotationLabelPoint,
+  getAnnotationSegments,
+  getLineAngle,
+} from "../features/photos/export-pdf";
 import { normalizePointer } from "../features/annotations/geometry";
 import { measurementValueSchema } from "../schemas/entities";
 import {
@@ -84,7 +89,7 @@ export function MedidasApp() {
     [selectedProjectId, setSelectedProjectId] = useState(""),
     [selectedEnvironmentId, setSelectedEnvironmentId] = useState(""),
     [preferredClientId, setPreferredClientId] = useState(""),
-    [modal, setModal] = useState<null | "client" | "project" | "environment">(
+    [modal, setModal] = useState<null | "client" | "project" | "environment" | "client-project">(
       null,
     ),
     [toast, setToast] = useState("");
@@ -315,18 +320,18 @@ export function MedidasApp() {
               photos={photos}
               pending={pending}
               go={setSection}
-              newClient={() => setModal("client")}
-              newProject={() => setModal("project")}
+              newClient={() => setModal("client-project")}
+              newProject={() => setModal("client-project")}
             />
           )}{" "}
           {section === "clients" && (
-            <Clients clients={clients} add={() => setModal("client")} />
+            <Clients clients={clients} add={() => setModal("client-project")} />
           )}{" "}
           {section === "projects" && (
             <Projects
               projects={projects}
               clients={clients}
-              add={() => setModal("project")}
+              add={() => setModal("client-project")}
               addEnv={() => setModal("environment")}
               open={(projectId) => {
                 setSelectedProjectId(projectId);
@@ -400,9 +405,73 @@ export function MedidasApp() {
           close={() => setModal(null)}
           saved={({ type, id, environmentId }) => {
             setToast("Salvo neste dispositivo");
-            if (type === "client") {
+            if (type === "client-project") {
+      const clientId = uid();
+      const projectId = uid();
+      const environmentId = uid();
+      const formData = new FormData(ref.current!);
+      const clientName = String(formData.get("clientName") || "").trim();
+      const projectName = String(formData.get("projectName") || "").trim();
+      const responsible = String(formData.get("responsible") || "").trim();
+      const unit = (formData.get("unit") || "mm") as Project["unit"];
+      const envType = String(formData.get("envType") || "Cozinha");
+      if (!clientName || !projectName) {
+        alert("Informe o nome do cliente e do projeto.");
+        return;
+      }
+      await db.transaction(
+        "rw",
+        db.clients,
+        db.projects,
+        db.environments,
+        db.syncOperations,
+        async () => {
+          await db.clients.put({
+            id: clientId,
+            name: clientName,
+            phone: String(formData.get("phone") || ""),
+            email: String(formData.get("email") || ""),
+            address: String(formData.get("address") || ""),
+            notes: String(formData.get("notes") || ""),
+            status: "active",
+            createdAt: now(),
+            updatedAt: now(),
+          });
+          await db.projects.put({
+            id: projectId,
+            clientId,
+            name: projectName,
+            address: String(formData.get("address") || ""),
+            responsible,
+            unit,
+            status: "draft",
+            version: 1,
+            createdAt: now(),
+            updatedAt: now(),
+          });
+          await db.environments.put({
+            id: environmentId,
+            projectId,
+            name: envType,
+            type: envType,
+            status: "active",
+          });
+          await queue("client", clientId, "create");
+          await queue("project", projectId, "create");
+          await queue("environment", environmentId, "create");
+        },
+      );
+      saved({ type: "client-project", id: projectId, environmentId });
+      return;
+    }
+    if (type === "client-project") {
+              setModal(null);
+              setSelectedProjectId(id);
+              setSelectedEnvironmentId(environmentId || "");
+              setSection("floorplan");
+            } else if (type === "client") {
               setPreferredClientId(id);
-              setModal("project");
+              setModal("client-project");
             } else if (type === "project") {
               setModal(null);
               setSelectedProjectId(id);
@@ -738,7 +807,7 @@ function Modal({
   close,
   saved,
 }: {
-  type: "client" | "project" | "environment";
+  type: "client" | "project" | "environment" | "client-project";
   clients: Client[];
   projects: Project[];
   preferredClientId?: string;
@@ -816,17 +885,58 @@ function Modal({
       <form ref={ref} className="modal" onSubmit={submit}>
         <div className="cardhead">
           <h2>
-            {type === "client"
-              ? "Novo cliente"
-              : type === "project"
-                ? "Novo projeto"
-                : "Novo ambiente"}
+            {type === "client-project"
+              ? "Criar cliente e projeto"
+              : type === "client"
+                ? "Novo cliente"
+                : type === "project"
+                  ? "Novo projeto"
+                  : "Novo ambiente"}
           </h2>
           <button type="button" className="btn" onClick={close}>
             Fechar
           </button>
         </div>
         <div className="formgrid">
+          {type === "client-project" && (
+            <>
+              <Field label="Nome do cliente" full>
+                <input name="clientName" required autoFocus />
+              </Field>
+              <Field label="Nome do projeto" full>
+                <input name="projectName" required />
+              </Field>
+              <Field label="Telefone">
+                <input name="phone" />
+              </Field>
+              <Field label="E-mail">
+                <input type="email" name="email" />
+              </Field>
+              <Field label="Endereço" full>
+                <input name="address" />
+              </Field>
+              <Field label="Responsável">
+                <input name="responsible" />
+              </Field>
+              <Field label="Unidade">
+                <select name="unit">
+                  <option value="mm">Milímetros</option>
+                  <option value="cm">Centímetros</option>
+                  <option value="m">Metros</option>
+                </select>
+              </Field>
+              <Field label="Primeiro ambiente">
+                <select name="envType" defaultValue="Cozinha">
+                  {types.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Observações internas" full>
+                <textarea name="notes" rows={3} />
+              </Field>
+            </>
+          )}
           {type === "project" && (
             <Field label="Cliente">
               <select
@@ -866,7 +976,7 @@ function Modal({
               </Field>
             </>
           )}
-          {type !== "environment" && (
+          {type !== "environment" && type !== "client-project" && (
             <Field
               label={type === "project" ? "Nome do projeto" : "Nome do cliente"}
             >
@@ -920,9 +1030,11 @@ function Modal({
           </button>
           <button className="btn primary">
             <Save size={16} />
-            {type === "project"
-              ? "Criar e iniciar projeto"
-              : "Salvar no dispositivo"}
+            {type === "client-project"
+              ? "Criar cliente e projeto"
+              : type === "project"
+                ? "Criar e iniciar projeto"
+                : "Salvar no dispositivo"}
           </button>
         </div>
       </form>
@@ -1134,6 +1246,7 @@ function Editor({
     await queue("annotation", id, "create");
     setDraftPoints([]);
     setTool("select");
+    setLastAction("annotation");
     notify(`${config.label} salva e protegida`);
   }
   async function movePhotoAnnotation(e: React.PointerEvent<HTMLDivElement>) {
@@ -1351,8 +1464,6 @@ function Editor({
         <div className="tools">
           {[
             ["select", "↖ Selecionar"],
-            ["linear", "↔ Medida"],
-            ["l", "⌞ Medida em L"],
             ["angle", "∠ Ângulo"],
             ["point", "⊙ Ponto técnico"],
             ["text", "T Texto"],
@@ -1450,9 +1561,28 @@ function Editor({
               </div>
             )}
           </div>
-          <div className="statusbar">
-            <Lock size={12} style={{ display: "inline" }} /> Salvo neste
-            dispositivo
+          <div className="statusbar" style={{ justifyContent: "space-between" }}>
+            <span>
+              <Lock size={12} style={{ display: "inline" }} /> Salvo neste
+              dispositivo
+            </span>
+            <button
+              className="btn"
+              onClick={async () => {
+                if (!lastAction) return;
+                if (lastAction === "annotation") {
+                  const latest = [...anns].sort((a, b) => b.layer - a.layer)[0];
+                  if (latest) {
+                    await db.annotations.delete(latest.id);
+                    await queue("annotation", latest.id, "delete");
+                    notify("Última marcação removida");
+                  }
+                }
+                setLastAction("");
+              }}
+            >
+              Desfazer última ação
+            </button>
           </div>
         </div>
         <aside className="inspector">
@@ -2129,7 +2259,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       <Head
         eye="Planta baixa"
         title="Desenho do ambiente"
-        sub="Desenhe a geometria e informe manualmente cada medida real; nenhum valor é calculado ou inventado."
+        sub="Desenhe paredes livremente com cantos retos e ajuste depois os pontos, medidas e elementos da planta."
       />
       {!environment && (
         <section className="card empty">
@@ -2477,7 +2607,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             </svg>
             {!strokes.length && (
               <div className="emptycanvas">
-                <p>Toque ou clique para iniciar o contorno livre.</p>
+                <p>Toque ou clique para iniciar o contorno da parede livre.</p>
               </div>
             )}
           </div>
@@ -2574,14 +2704,14 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             )}
           {mode === "wall" && (
             <p className="subtitle">
-              Desenhe continuamente. Cada trecho fica reto e toda mudança de
-              direção cria uma quina.
+              Desenhe livremente como em um app de planta; o traço é convertido
+              em paredes retas com quinas e alinhamento ortogonal.
             </p>
           )}
           {mode === "point" && (
             <p className="subtitle">
               Toque perto de uma parede para inserir um ponto; depois arraste
-              esse ponto para formar a quina desejada.
+              esse ponto para ajustar a quina ou o alinhamento da parede.
             </p>
           )}
           {mode === "curve" && (
@@ -3147,7 +3277,8 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
     environments = project
       ? await db.environments.where("projectId").equals(project.id).toArray()
       : [],
-    pageWidth = 297;
+    pageWidth = 297,
+    pageHeight = 210;
   const header = (title: string, subtitle: string) => {
     d.setFillColor(9, 44, 76);
     d.rect(0, 0, pageWidth, 23, "F");
@@ -3181,7 +3312,15 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
     97,
   );
   d.text(project?.address || "Endereço não informado", 18, 108);
+  d.setTextColor(96, 115, 134);
   d.text("Documento estruturado. Nenhuma medida foi estimada.", 18, 126);
+  d.setDrawColor(205);
+  d.roundedRect(18, 136, 261, 44, 2, 2);
+  d.setTextColor(23, 37, 52);
+  d.setFontSize(9);
+  d.text("• Identificação por ambiente", 24, 148);
+  d.text("• Planta baixa e foto com marcações alinhadas", 24, 156);
+  d.text("• Formato de medição preservado para produção", 24, 164);
   footer();
 
   d.addPage();
@@ -3274,10 +3413,10 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
           x2 = box.x + measurement.end.x * box.w,
           y2 = box.y + measurement.end.y * box.h;
         d.setDrawColor(190, 35, 35);
-        d.setLineWidth(0.5);
+        d.setLineWidth(0.7);
         d.line(x1, y1, x2, y2);
-        d.circle(x1, y1, 1, "F");
-        d.circle(x2, y2, 1, "F");
+        d.circle(x1, y1, 1.2, "F");
+        d.circle(x2, y2, 1.2, "F");
         if (measurement.value) {
           const labelPoint = measurement.labelPoint || {
             x: (measurement.start.x + measurement.end.x) / 2,
@@ -3370,31 +3509,43 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
             );
             return;
           }
-          if (annotation.points.length > 1) {
-            const [start, end] = annotation.points;
-            d.setDrawColor(230, 47, 47);
-            d.setLineWidth(0.8);
-            d.line(
-              x + start.x * width,
-              y + start.y * height,
-              x + end.x * width,
-              y + end.y * height,
-            );
-            if (annotation.value) {
-              const labelPoint = annotation.labelPoint || {
-                x: (start.x + end.x) / 2,
-                y: (start.y + end.y) / 2,
-              };
+          const segments = getAnnotationSegments(annotation);
+          if (!segments.length) return;
+          d.setDrawColor(230, 47, 47);
+          d.setLineWidth(0.8);
+          segments.forEach((segment, index) => {
+            const startX = x + segment.start.x * width;
+            const startY = y + segment.start.y * height;
+            const endX = x + segment.end.x * width;
+            const endY = y + segment.end.y * height;
+            d.line(startX, startY, endX, endY);
+            d.circle(startX, startY, 0.9, "F");
+            d.circle(endX, endY, 0.9, "F");
+            if (segment.value) {
+              const labelPoint = getAnnotationLabelPoint(annotation, index);
               d.setFillColor(255, 255, 255);
               d.setTextColor(170, 20, 20);
               d.setFontSize(8);
               d.text(
-                `${annotation.code}: ${annotation.value}`,
+                `${annotation.code}: ${segment.value}`,
                 x + labelPoint.x * width,
                 y + labelPoint.y * height,
                 { align: "center" },
               );
             }
+          });
+          if (annotation.type === "angle" && annotation.points.length >= 3) {
+            const [p1, p2, p3] = annotation.points;
+            d.setDrawColor(22, 103, 190);
+            d.setFontSize(7);
+            d.text(
+              `${annotation.value}°`,
+              x + p2.x * width,
+              y + p2.y * height,
+              { align: "center" },
+            );
+            d.line(x + p1.x * width, y + p1.y * height, x + p2.x * width, y + p2.y * height);
+            d.line(x + p3.x * width, y + p3.y * height, x + p2.x * width, y + p2.y * height);
           }
         });
       footer();

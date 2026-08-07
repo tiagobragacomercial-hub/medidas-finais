@@ -100,16 +100,33 @@ export function polylineStroke(source: Point[]): Point[] {
   const points = withoutNearDuplicates(source);
   if (points.length < 3) return straightenStroke(points);
   const corners = simplify(points, 0.032);
-  return corners.map((point, index) => {
-    if (!index) return point;
-    const previous = corners[index - 1], dx = point.x - previous.x, dy = point.y - previous.y,
-      angle = Math.abs(Math.atan2(dy, dx));
-    if (angle < Math.PI / 18 || angle > Math.PI - Math.PI / 18)
-      return { x: point.x, y: previous.y };
-    if (Math.abs(angle - Math.PI / 2) < Math.PI / 18)
-      return { x: previous.x, y: point.y };
-    return point;
-  });
+  if (corners.length < 2) return corners;
+  const orthogonal: Point[] = [corners[0]];
+  for (let index = 1; index < corners.length; index += 1) {
+    const current = orthogonal[orthogonal.length - 1];
+    const point = corners[index];
+    const dx = point.x - current.x;
+    const dy = point.y - current.y;
+    const nextPoint =
+      Math.abs(dx) >= Math.abs(dy)
+        ? { x: point.x, y: current.y }
+        : { x: current.x, y: point.y };
+    if (
+      orthogonal[orthogonal.length - 1].x !== nextPoint.x ||
+      orthogonal[orthogonal.length - 1].y !== nextPoint.y
+    ) {
+      orthogonal.push(nextPoint);
+    }
+    if (index === corners.length - 1) {
+      if (
+        orthogonal[orthogonal.length - 1].x !== point.x ||
+        orthogonal[orthogonal.length - 1].y !== point.y
+      ) {
+        orthogonal.push(point);
+      }
+    }
+  }
+  return orthogonal;
 }
 
 export function rectifyPath(points: Point[]): Point[] {

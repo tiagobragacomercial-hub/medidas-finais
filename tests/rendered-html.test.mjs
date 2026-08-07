@@ -77,6 +77,25 @@ test("medidas e textos possuem posicionamento manual independente", async () => 
   assert.match(exporter, /a\.labelPoint \|\|/);
 });
 
+test("cadastro de cliente e projeto usa um fluxo único", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /Criar cliente e projeto/);
+  assert.match(app, /Responsável/);
+  assert.match(app, /Primeiro ambiente/);
+});
+
+test("editor de medidas remove a ferramenta em L e oferece desfazer", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(app, /\["linear", "↔ Medida"\]/);
+  assert.match(app, /Desfazer última ação/);
+});
+
 test("planta aceita traços contínuos e componentes de porta e janela", async () => {
   const [app, models] = await Promise.all([
     readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
@@ -86,8 +105,8 @@ test("planta aceita traços contínuos e componentes de porta e janela", async (
   assert.match(app, /setDrawingStroke\(true\)/);
   assert.match(app, /strokeLinecap="round"/);
   assert.match(app, /Ajustar retas e quinas/);
-  assert.match(app, /"wall", "point", "curve"/);
-  assert.match(app, /mode === "curve" \? processFreehandStroke\(stroke\) : polylineStroke\(stroke\)/);
+  assert.match(app, /Desenhar paredes/);
+  assert.match(app, /mode === "curve"/);
   assert.match(app, /Adicionar ponto/);
   assert.match(app, /A 48 48/);
   assert.match(app, /el\.type === "window"/);
@@ -124,7 +143,7 @@ test("traços não bloqueiam o início de outra medida", async () => {
   assert.match(app, /pointerEvents: "none"/);
   assert.match(app, /pointerEvents="none"/);
   assert.match(app, /selectedMeasurement && mode !== "measure"/);
-  assert.match(app, /\(mode === "wall" \|\| mode === "curve" \|\| mode === "point"\) && strokes\.flatMap/);
+  assert.match(app, /\(mode === "wall" \|\| mode === "curve" \|\| mode === "point"\) &&/);
 });
 
 test("medida mostra prévia entre os pontos e solicita o número por último", async () => {
