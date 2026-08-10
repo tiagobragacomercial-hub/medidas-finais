@@ -315,6 +315,33 @@ button {
   caret-color: var(--blue);
   outline: none;
 }
+.environment-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.check-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.check-option input { width: 18px; height: 18px; }
+.compact-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.compact-control input[type="color"] { width: 34px; height: 28px; padding: 1px; }
+.floorplan-actions { margin-top: 12px; flex-wrap: wrap; }
 .field input::placeholder,
 .field textarea::placeholder {
   color: #7b8b9a;

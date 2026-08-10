@@ -42,6 +42,8 @@ export interface Photo {
   durationSeconds?: number;
   syncState: SyncState;
   createdAt: string;
+  wallCode?: string;
+  detailOfPhotoId?: string;
 }
 export interface Point {
   x: number;
@@ -63,6 +65,10 @@ export interface Annotation {
   layer: number;
   version: number;
   updatedAt: string;
+  color?: string;
+  strokeWidth?: number;
+  fontSize?: number;
+  locked?: boolean;
 }
 export interface SyncOperation {
   id: string;
@@ -108,12 +114,14 @@ export interface TrashItem {
 }
 export interface FloorPlanElement {
   id: string;
-  type: "door" | "window" | "camera";
+  type: "door" | "window" | "column" | "camera";
   x: number;
   y: number;
   direction?: number;
   flipped?: boolean;
   photoId?: string;
+  width?: number;
+  height?: number;
 }
 export interface FloorPlanMeasurement {
   id: string;
@@ -122,6 +130,8 @@ export interface FloorPlanMeasurement {
   value: string;
   unit: "mm" | "cm" | "m";
   labelPoint?: Point;
+  color?: string;
+  locked?: boolean;
 }
 export interface FloorPlanText {
   id: string;

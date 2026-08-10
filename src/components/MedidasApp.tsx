@@ -357,6 +357,7 @@ export function MedidasApp() {
               envs={selectedProjectEnvironments}
               environmentId={selectedEnvironmentId}
               selectEnvironment={setSelectedEnvironmentId}
+              onConfirmed={() => setSection("editor")}
             />
           )}{" "}
           {section === "sync" && <Sync pending={pending} />}{" "}
@@ -406,65 +407,6 @@ export function MedidasApp() {
           saved={async ({ type, id, environmentId }) => {
             setToast("Salvo neste dispositivo");
             if (type === "client-project") {
-              const clientId = uid();
-              const projectId = uid();
-              const environmentId = uid();
-              const formData = new FormData(ref.current!);
-              const clientName = String(formData.get("clientName") || "").trim();
-              const projectName = String(formData.get("projectName") || "").trim();
-              const responsible = String(formData.get("responsible") || "").trim();
-              const unit = (formData.get("unit") || "mm") as Project["unit"];
-              const envType = String(formData.get("envType") || "Cozinha");
-              if (!clientName || !projectName) {
-                alert("Informe o nome do cliente e do projeto.");
-                return;
-              }
-              await db.transaction(
-                "rw",
-                db.clients,
-                db.projects,
-                db.environments,
-                db.syncOperations,
-                async () => {
-          await db.clients.put({
-            id: clientId,
-            name: clientName,
-            phone: String(formData.get("phone") || ""),
-            email: String(formData.get("email") || ""),
-            address: String(formData.get("address") || ""),
-            notes: String(formData.get("notes") || ""),
-            status: "active",
-            createdAt: now(),
-            updatedAt: now(),
-          });
-          await db.projects.put({
-            id: projectId,
-            clientId,
-            name: projectName,
-            address: String(formData.get("address") || ""),
-            responsible,
-            unit,
-            status: "draft",
-            version: 1,
-            createdAt: now(),
-            updatedAt: now(),
-          });
-          await db.environments.put({
-            id: environmentId,
-            projectId,
-            name: envType,
-            type: envType,
-            status: "active",
-          });
-          await queue("client", clientId, "create");
-          await queue("project", projectId, "create");
-          await queue("environment", environmentId, "create");
-        },
-      );
-      saved({ type: "client-project", id: projectId, environmentId });
-      return;
-    }
-    if (type === "client-project") {
               setModal(null);
               setSelectedProjectId(id);
               setSelectedEnvironmentId(environmentId || "");
@@ -814,7 +756,7 @@ function Modal({
   preferredProjectId?: string;
   close: () => void;
   saved: (result: {
-    type: "client" | "project" | "environment";
+    type: "client" | "project" | "environment" | "client-project";
     id: string;
     environmentId?: string;
   }) => void;
@@ -824,6 +766,69 @@ function Modal({
     e.preventDefault();
     const f = new FormData(ref.current!),
       id = uid();
+    if (type === "client-project") {
+      const clientId = uid(),
+        projectId = uid(),
+        environmentId = uid(),
+        clientName = String(f.get("clientName") || "").trim(),
+        responsible = String(f.get("responsible") || "").trim(),
+        unit = (f.get("unit") || "mm") as Project["unit"],
+        environments = f
+          .getAll("envType")
+          .map(String)
+          .map((value) => value.trim())
+          .filter(Boolean);
+      await db.transaction(
+        "rw",
+        db.clients,
+        db.projects,
+        db.environments,
+        db.syncOperations,
+        async () => {
+          await db.clients.put({
+            id: clientId,
+            name: clientName,
+            phone: String(f.get("phone") || ""),
+            email: String(f.get("email") || ""),
+            address: String(f.get("address") || ""),
+            notes: String(f.get("notes") || ""),
+            status: "active",
+            createdAt: now(),
+            updatedAt: now(),
+          });
+          await db.projects.put({
+            id: projectId,
+            clientId,
+            name: clientName,
+            address: String(f.get("address") || ""),
+            responsible,
+            unit,
+            status: "draft",
+            version: 1,
+            createdAt: now(),
+            updatedAt: now(),
+          });
+          for (const [index, envType] of (environments.length
+            ? environments
+            : ["Cozinha"]
+          ).entries()) {
+            const envId = index === 0 ? environmentId : uid();
+            await db.environments.put({
+              id: envId,
+              projectId,
+              name: envType,
+              type: envType,
+              status: "active",
+            });
+            await queue("environment", envId, "create");
+          }
+          await queue("client", clientId, "create");
+          await queue("project", projectId, "create");
+        },
+      );
+      saved({ type, id: projectId, environmentId });
+      return;
+    }
     if (type === "client")
       await db.clients.put({
         id,
@@ -903,9 +908,6 @@ function Modal({
               <Field label="Nome do cliente" full>
                 <input name="clientName" required autoFocus />
               </Field>
-              <Field label="Nome do projeto" full>
-                <input name="projectName" required />
-              </Field>
               <Field label="Telefone">
                 <input name="phone" />
               </Field>
@@ -925,12 +927,20 @@ function Modal({
                   <option value="m">Metros</option>
                 </select>
               </Field>
-              <Field label="Primeiro ambiente">
-                <select name="envType" defaultValue="Cozinha">
-                  {types.map((item) => (
-                    <option key={item}>{item}</option>
+              <Field label="Ambientes que serão medidos" full>
+                <div className="environment-picker">
+                  {types.map((item, index) => (
+                    <label key={item} className="check-option">
+                      <input
+                        type="checkbox"
+                        name="envType"
+                        value={item}
+                        defaultChecked={index === 0}
+                      />
+                      {item}
+                    </label>
                   ))}
-                </select>
+                </div>
               </Field>
               <Field label="Observações internas" full>
                 <textarea name="notes" rows={3} />
@@ -1097,17 +1107,44 @@ function Editor({
       null,
     ),
     [selected, setSelected] = useState(""),
+    [lastAction, setLastAction] = useState(""),
     [photoDrag, setPhotoDrag] = useState<{
       annotationId: string;
       target: "start" | "end" | "label" | "description";
-    } | null>(null);
+    } | null>(null),
+    [wallIndex, setWallIndex] = useState(0),
+    [uploadAsDetail, setUploadAsDetail] = useState(false);
+  const currentPlan = useLiveQuery<FloorPlanRecord | undefined>(
+    () =>
+      environmentId
+        ? db.floorPlans.where("environmentId").equals(environmentId).first()
+        : Promise.resolve(undefined),
+    [environmentId],
+  );
+  const wallCount = Math.max(
+    1,
+    (currentPlan?.strokes || []).reduce(
+      (total, stroke, index) =>
+        total +
+        (currentPlan?.strokeKinds?.[index] === "curve"
+          ? stroke.length > 1
+            ? 1
+            : 0
+          : Math.max(0, stroke.length - 1)),
+      0,
+    ),
+  );
+  const currentWallCode = wallCode(wallIndex);
+  const wallPhotos = environmentPhotos.filter(
+    (item) => !item.wallCode || item.wallCode === currentWallCode,
+  );
   const file = useRef<HTMLInputElement>(null),
     cameraFile = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!environmentPhotos.some((item) => item.id === photoId))
-      setPhotoId(environmentPhotos[0]?.id || "");
-  }, [environmentPhotos, photoId]);
+    if (!wallPhotos.some((item) => item.id === photoId))
+      setPhotoId(wallPhotos[0]?.id || "");
+  }, [wallPhotos, photoId]);
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     const environment = envs.find((item) => item.id === environmentId);
@@ -1135,9 +1172,12 @@ function Editor({
         durationSeconds,
         syncState: "local",
         createdAt: now(),
+        wallCode: currentWallCode,
+        detailOfPhotoId: uploadAsDetail ? photoId || undefined : undefined,
       });
       await queue("photo", id, "upload");
       if (mediaType === "image") setPhotoId(id);
+      setUploadAsDetail(false);
       URL.revokeObjectURL(url);
       e.target.value = "";
       notify(
@@ -1242,6 +1282,10 @@ function Editor({
       layer: anns.length + 1,
       version: 1,
       updatedAt: now(),
+      color: "#ef3340",
+      strokeWidth: 3,
+      fontSize: 16,
+      locked: false,
     });
     await queue("annotation", id, "create");
     setDraftPoints([]);
@@ -1416,6 +1460,19 @@ function Editor({
           className="actions"
           style={{ alignItems: "end", flexWrap: "wrap" }}
         >
+          <label className="field" style={{ minWidth: 180 }}>
+            <span>Parede</span>
+            <select
+              value={wallIndex}
+              onChange={(event) => setWallIndex(Number(event.target.value))}
+            >
+              {Array.from({ length: wallCount }, (_, index) => (
+                <option key={index} value={index}>
+                  Parede {wallCode(index)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="field" style={{ minWidth: 240 }}>
             <span>Ambiente</span>
             <select
@@ -1434,17 +1491,28 @@ function Editor({
             <span>Fotografia</span>
             <select
               value={photoId}
-              disabled={!environmentPhotos.length}
+              disabled={!wallPhotos.length}
               onChange={(event) => setPhotoId(event.target.value)}
             >
               <option value="">Nenhuma fotografia</option>
-              {environmentPhotos.map((item) => (
+              {wallPhotos.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name}
+                  {item.detailOfPhotoId ? "Detalhe · " : ""}{item.name}
                 </option>
               ))}
             </select>
           </label>
+          <button
+            className="btn"
+            disabled={!photo}
+            onClick={() => {
+              setUploadAsDetail(true);
+              file.current?.click();
+            }}
+          >
+            <ImagePlus size={16} />
+            Adicionar detalhe
+          </button>
         </div>
       </section>
       {environmentVideos.length > 0 && (
@@ -1462,6 +1530,16 @@ function Editor({
       )}
       <div className="workspace">
         <div className="tools">
+          <button
+            className={`tool ${tool === "linear" ? "active" : ""}`}
+            onClick={() => {
+              setTool("linear");
+              setDraftPoints([]);
+              setDraftPointer(null);
+            }}
+          >
+            ↔ Medida
+          </button>
           {[
             ["select", "↖ Selecionar"],
             ["angle", "∠ Ângulo"],
@@ -1545,7 +1623,8 @@ function Editor({
                       click={() => setSelected(a.id)}
                       startDrag={(target) => {
                         setSelected(a.id);
-                        setPhotoDrag({ annotationId: a.id, target });
+                        if (!a.locked)
+                          setPhotoDrag({ annotationId: a.id, target });
                       }}
                       showHandles={tool === "select"}
                     />
@@ -1583,6 +1662,30 @@ function Editor({
             >
               Desfazer última ação
             </button>
+            <button
+              className="btn"
+              disabled={!photo}
+              onClick={() => {
+                if (photo?.detailOfPhotoId) setPhotoId(photo.detailOfPhotoId);
+                notify("Imagem e medidas salvas");
+              }}
+            >
+              Salvar/Voltar
+            </button>
+            <button
+              className="btn primary"
+              disabled={!photo}
+              onClick={() => {
+                setWallIndex((index) => Math.min(wallCount - 1, index + 1));
+                notify(
+                  wallIndex < wallCount - 1
+                    ? `Salvo. Próxima: Parede ${wallCode(wallIndex + 1)}`
+                    : "Todas as paredes foram concluídas",
+                );
+              }}
+            >
+              Salvar/Continuar
+            </button>
           </div>
         </div>
         <aside className="inspector">
@@ -1611,10 +1714,70 @@ function Editor({
                     flexWrap: "wrap",
                   }}
                 >
-                  <button className="btn" onClick={() => edit(a)}>
+                  <button
+                    className={`btn ${a.locked ? "primary" : ""}`}
+                    onClick={async () => {
+                      await db.annotations.update(a.id, {
+                        locked: !a.locked,
+                        state: !a.locked ? "protected" : "editing",
+                        updatedAt: now(),
+                      });
+                      await queue("annotation", a.id, "update");
+                    }}
+                  >
                     <Lock size={13} />
-                    Desbloquear
+                    {a.locked ? "Destravar" : "Travar"}
                   </button>
+                  <button className="btn" disabled={a.locked} onClick={() => edit(a)}>
+                    Editar medida
+                  </button>
+                  <label className="compact-control">
+                    Cor
+                    <input
+                      type="color"
+                      value={a.color || "#ef3340"}
+                      disabled={a.locked}
+                      onChange={async (event) => {
+                        await db.annotations.update(a.id, {
+                          color: event.target.value,
+                          updatedAt: now(),
+                        });
+                        await queue("annotation", a.id, "update");
+                      }}
+                    />
+                  </label>
+                  <label className="compact-control">
+                    Linha {a.strokeWidth || 3}px
+                    <input
+                      type="range"
+                      min="1"
+                      max="12"
+                      value={a.strokeWidth || 3}
+                      disabled={a.locked}
+                      onChange={async (event) => {
+                        await db.annotations.update(a.id, {
+                          strokeWidth: Number(event.target.value),
+                          updatedAt: now(),
+                        });
+                      }}
+                    />
+                  </label>
+                  <label className="compact-control">
+                    Letra {a.fontSize || 16}px
+                    <input
+                      type="range"
+                      min="10"
+                      max="36"
+                      value={a.fontSize || 16}
+                      disabled={a.locked}
+                      onChange={async (event) => {
+                        await db.annotations.update(a.id, {
+                          fontSize: Number(event.target.value),
+                          updatedAt: now(),
+                        });
+                      }}
+                    />
+                  </label>
                   <button
                     className="btn"
                     onClick={async () => {
@@ -1820,8 +1983,14 @@ function Measure({
           top: `${p1.y * 100}%`,
           width: `${len}%`,
           transform: `rotate(${ang}deg)`,
-          height: selected ? 5 : 3,
-          pointerEvents: "none",
+          height: selected ? Math.max(5, a.strokeWidth || 3) : a.strokeWidth || 3,
+          background: a.color || "#ef3340",
+          pointerEvents: "auto",
+          cursor: "pointer",
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          click();
         }}
       />
       <button
@@ -1833,7 +2002,12 @@ function Measure({
           event.currentTarget.setPointerCapture(event.pointerId);
           startDrag("label");
         }}
-        style={{ left: `${label.x * 100}%`, top: `${label.y * 100}%` }}
+        style={{
+          left: `${label.x * 100}%`,
+          top: `${label.y * 100}%`,
+          fontSize: a.fontSize || 16,
+          color: a.color || "#ef3340",
+        }}
       >
         {a.value || "?"}
       </button>
@@ -1888,10 +2062,12 @@ function FloorPlan({
   envs,
   environmentId,
   selectEnvironment,
+  onConfirmed,
 }: {
   envs: Environment[];
   environmentId: string;
   selectEnvironment: (environmentId: string) => void;
+  onConfirmed: () => void;
 }) {
   return (
     <>
@@ -1914,11 +2090,18 @@ function FloorPlan({
       <InteractiveFloorPlan
         key={environmentId || "empty"}
         environment={envs.find((item) => item.id === environmentId)}
+        onConfirmed={onConfirmed}
       />
     </>
   );
 }
-function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
+function InteractiveFloorPlan({
+  environment,
+  onConfirmed,
+}: {
+  environment?: Environment;
+  onConfirmed: () => void;
+}) {
   const [points, setPoints] = useState<Array<{ x: number; y: number }>>([]),
     [strokes, setStrokes] = useState<Array<Array<{ x: number; y: number }>>>(
       [],
@@ -1930,6 +2113,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       | "point"
       | "door"
       | "window"
+      | "column"
       | "camera"
       | "measure"
       | "text"
@@ -1956,6 +2140,9 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     >(null),
     [dragging, setDragging] = useState(false),
     [drawingStroke, setDrawingStroke] = useState(false),
+    [actionHistory, setActionHistory] = useState<
+      Array<"wall" | "element" | "measurement" | "text">
+    >([]),
     [dragPart, setDragPart] = useState<"item" | "start" | "end" | "label">(
       "item",
     );
@@ -2144,8 +2331,11 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
             end: p,
             value: parsed.data,
             unit: floorPlanProject?.unit || "mm",
+            color: "#d12f2f",
+            locked: false,
           },
         ]);
+        setActionHistory((items) => [...items, "measurement"]);
         setSelected({ kind: "measurement", id });
         setMeasurementStart(null);
         setMeasurementPreview(null);
@@ -2155,12 +2345,38 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       if (value) {
         const id = uid();
         setTexts((items) => [...items, { id, value, point: p }]);
+        setActionHistory((items) => [...items, "text"]);
         setSelected({ kind: "text", id });
       }
+    } else if (mode === "column") {
+      const width = prompt("Largura da coluna:", "300");
+      if (width === null) return;
+      const height = prompt("Comprimento da coluna:", "300");
+      if (height === null) return;
+      const parsedWidth = measurementValueSchema.safeParse(width.trim()),
+        parsedHeight = measurementValueSchema.safeParse(height.trim());
+      if (!parsedWidth.success || !parsedHeight.success) {
+        alert("Informe largura e comprimento usando somente números.");
+        return;
+      }
+      const id = uid();
+      setElements((items) => [
+        ...items,
+        {
+          id,
+          type: "column",
+          ...p,
+          width: Number(parsedWidth.data),
+          height: Number(parsedHeight.data),
+        },
+      ]);
+      setSelected({ kind: "element", id });
+      setActionHistory((items) => [...items, "element"]);
     } else {
       const id = uid();
       setElements((items) => [...items, { id, type: mode, ...p }]);
       setSelected({ kind: "element", id });
+      setActionHistory((items) => [...items, "element"]);
     }
   }
   function pointerPosition(e: React.PointerEvent<SVGSVGElement>) {
@@ -2205,6 +2421,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       setMeasurements((items) =>
         items.map((item) => {
           if (item.id !== selected.id) return item;
+          if (item.locked) return item;
           if (dragPart === "start") return { ...item, start: p };
           if (dragPart === "end") return { ...item, end: p };
           return { ...item, labelPoint: p };
@@ -2218,18 +2435,26 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
       );
   }
   function finishCanvasGesture() {
-    if (drawingStroke)
+    if (drawingStroke) {
       setStrokes((items) =>
         items
           .map((stroke, index) =>
             index === items.length - 1
               ? mode === "curve"
-                ? processFreehandStroke(stroke)
+                ? stroke.length >= 3
+                  ? [
+                      stroke[0],
+                      stroke[Math.floor(stroke.length / 2)],
+                      stroke[stroke.length - 1],
+                    ]
+                  : processFreehandStroke(stroke)
                 : polylineStroke(stroke)
               : stroke,
           )
           .filter((stroke) => stroke.length > 1),
       );
+      setActionHistory((items) => [...items, "wall"]);
+    }
     setDragging(false);
     setDrawingStroke(false);
   }
@@ -2254,6 +2479,37 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
     else setTexts((items) => items.filter((item) => item.id !== selected.id));
     setSelected(null);
   }
+  function undoLast() {
+    const last = actionHistory[actionHistory.length - 1];
+    if (!last || confirmed) return;
+    if (last === "wall") setStrokes((items) => items.slice(0, -1));
+    if (last === "element") setElements((items) => items.slice(0, -1));
+    if (last === "measurement")
+      setMeasurements((items) => items.slice(0, -1));
+    if (last === "text") setTexts((items) => items.slice(0, -1));
+    setActionHistory((items) => items.slice(0, -1));
+    setSelected(null);
+  }
+  function clearDraft() {
+    if (confirmed || !confirm("Limpar toda a planta e começar do zero?")) return;
+    setStrokes([]);
+    setStrokeKinds([]);
+    setElements([]);
+    setMeasurements([]);
+    setTexts([]);
+    setActionHistory([]);
+    setSelected(null);
+  }
+  const wallSegments = strokes.flatMap((stroke, strokeIndex) =>
+    strokeKinds[strokeIndex] === "curve"
+      ? stroke.length > 1
+        ? [{ start: stroke[0], end: stroke[stroke.length - 1] }]
+        : []
+      : stroke.slice(1).map((end, index) => ({
+          start: stroke[index],
+          end,
+        })),
+  );
   return (
     <>
       <Head
@@ -2283,7 +2539,6 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               onPointerDown={add}
             >
               {strokes.map((stroke, strokeIndex) => {
-                const middle = stroke[Math.floor(stroke.length / 2)];
                 return (
                   <g key={`stroke-${strokeIndex}`}>
                     <path
@@ -2304,24 +2559,31 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       strokeLinejoin="round"
                       pointerEvents="none"
                     />
-                    {middle && stroke.length > 1 && (
-                      <text
-                        x={middle.x * 1000}
-                        y={middle.y * 600 - 12}
-                        fill="#075da9"
-                        pointerEvents="none"
-                      >
-                        {strokeKinds[strokeIndex] !== "curve"
-                          ? "Reta"
-                          : classifyStroke(stroke) === "curve"
-                            ? "Curva"
-                            : "Misto"}{" "}
-                        {wallCode(strokeIndex)}
-                      </text>
-                    )}
                   </g>
                 );
               })}
+              {wallSegments.map((segment, index) => (
+                <g key={`wall-label-${index}`} pointerEvents="none">
+                  <rect
+                    x={((segment.start.x + segment.end.x) / 2) * 1000 - 42}
+                    y={((segment.start.y + segment.end.y) / 2) * 600 - 24}
+                    width="84"
+                    height="28"
+                    rx="14"
+                    fill="#ffffff"
+                    stroke="#b8d9f5"
+                  />
+                  <text
+                    x={((segment.start.x + segment.end.x) / 2) * 1000}
+                    y={((segment.start.y + segment.end.y) / 2) * 600 - 5}
+                    textAnchor="middle"
+                    fill="#075da9"
+                    fontWeight="800"
+                  >
+                    Parede {wallCode(index)}
+                  </text>
+                </g>
+              ))}
               {measurements.map((measurement) => {
                 const selectedMeasurement =
                     selected?.kind === "measurement" &&
@@ -2347,7 +2609,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       y1={y1}
                       x2={x2}
                       y2={y2}
-                      stroke={selectedMeasurement ? "#f59e0b" : "#d12f2f"}
+                      stroke={selectedMeasurement ? "#f59e0b" : measurement.color || "#d12f2f"}
                       strokeWidth={selectedMeasurement ? 6 : 4}
                       strokeDasharray="12 7"
                       pointerEvents="none"
@@ -2361,7 +2623,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         cx={handle.x}
                         cy={handle.y}
                         r={selectedMeasurement ? 12 : 7}
-                        fill="#d12f2f"
+                        fill={measurement.color || "#d12f2f"}
                         pointerEvents={
                           selectedMeasurement && mode !== "measure"
                             ? "auto"
@@ -2369,7 +2631,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                         }
                         onPointerDown={(event) => {
                           event.stopPropagation();
-                          if (confirmed) return;
+                          if (confirmed || measurement.locked) return;
                           setSelected({
                             kind: "measurement",
                             id: measurement.id,
@@ -2389,10 +2651,10 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       height="28"
                       rx="6"
                       fill="#fff"
-                      stroke="#d12f2f"
+                      stroke={measurement.color || "#d12f2f"}
                       onPointerDown={(event) => {
                         event.stopPropagation();
-                        if (confirmed) return;
+                        if (confirmed || measurement.locked) return;
                         setSelected({
                           kind: "measurement",
                           id: measurement.id,
@@ -2410,7 +2672,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       x={labelX}
                       y={labelY - 3}
                       textAnchor="middle"
-                      fill="#9f1f1f"
+                      fill={measurement.color || "#9f1f1f"}
                       fontWeight="700"
                       style={{ pointerEvents: "none" }}
                     >
@@ -2556,6 +2818,26 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                       strokeWidth="4"
                     />
                   )}
+                  {el.type === "column" && (
+                    <g>
+                      <rect
+                        x={-Math.max(24, (el.width || 300) / 12)}
+                        y={-Math.max(24, (el.height || 300) / 12)}
+                        width={Math.max(48, (el.width || 300) / 6)}
+                        height={Math.max(48, (el.height || 300) / 6)}
+                        fill="#dce6ee"
+                        stroke={
+                          selected?.kind === "element" && selected.id === el.id
+                            ? "#f59e0b"
+                            : "#163b59"
+                        }
+                        strokeWidth="5"
+                      />
+                      <text y="5" textAnchor="middle" fontWeight="700">
+                        {el.width} × {el.height}
+                      </text>
+                    </g>
+                  )}
                   {el.type === "door" && (
                     <g transform={`rotate(${el.direction || 0})`}>
                       <g transform={el.flipped ? "scale(1 -1)" : undefined}>
@@ -2622,6 +2904,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 "curve",
                 "door",
                 "window",
+                "column",
                 "camera",
                 "measure",
                 "text",
@@ -2642,6 +2925,8 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                     ? "Adicionar ponto"
                     : x === "curve"
                       ? "Curva suave"
+                      : x === "column"
+                        ? "Coluna"
                       : x === "measure"
                         ? "medida"
                         : x === "text"
@@ -2649,6 +2934,17 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                           : x}
               </button>
             ))}
+          </div>
+          <div className="actions floorplan-actions">
+            <button className="btn" disabled={!actionHistory.length || confirmed} onClick={undoLast}>
+              Voltar/Desfazer
+            </button>
+            <button className="btn danger" disabled={!selected || confirmed} onClick={removeSelected}>
+              Excluir selecionado
+            </button>
+            <button className="btn danger" disabled={!strokes.length || confirmed} onClick={clearDraft}>
+              Limpar rascunho
+            </button>
           </div>
           {selectedElement &&
             ["door", "window"].includes(selectedElement.type) && (
@@ -2754,7 +3050,13 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
               !confirmed &&
               measurements.some((measurement) => !measurement.value)
             }
-            onClick={() => setConfirmed((v) => !v)}
+            onClick={() => {
+              if (confirmed) setConfirmed(false);
+              else {
+                setConfirmed(true);
+                onConfirmed();
+              }
+            }}
           >
             {confirmed ? "Editar novamente" : "Confirmar planta"}
           </button>
@@ -2813,7 +3115,7 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 <input
                   inputMode="decimal"
                   placeholder="Ex.: 3200"
-                  disabled={confirmed}
+                  disabled={confirmed || Boolean(measurements.find((item) => item.id === selected.id)?.locked)}
                   value={
                     measurements.find((item) => item.id === selected.id)
                       ?.value || ""
@@ -2837,7 +3139,77 @@ function InteractiveFloorPlan({ environment }: { environment?: Environment }) {
                 </strong>
               </div>
               <small>O sistema nunca calcula ou preenche este valor.</small>
+              <div className="actions">
+                <button
+                  type="button"
+                  className={`btn ${measurements.find((item) => item.id === selected.id)?.locked ? "primary" : ""}`}
+                  onClick={() =>
+                    setMeasurements((items) =>
+                      items.map((item) =>
+                        item.id === selected.id
+                          ? { ...item, locked: !item.locked }
+                          : item,
+                      ),
+                    )
+                  }
+                >
+                  <Lock size={14} />
+                  {measurements.find((item) => item.id === selected.id)?.locked
+                    ? "Destravar"
+                    : "Travar"}
+                </button>
+                <input
+                  type="color"
+                  aria-label="Cor da medida"
+                  disabled={Boolean(measurements.find((item) => item.id === selected.id)?.locked)}
+                  value={measurements.find((item) => item.id === selected.id)?.color || "#d12f2f"}
+                  onChange={(event) =>
+                    setMeasurements((items) =>
+                      items.map((item) =>
+                        item.id === selected.id
+                          ? { ...item, color: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </div>
             </label>
+          )}
+          {selectedElement?.type === "column" && (
+            <div className="field">
+              <span>Medidas da coluna ({floorPlanProject?.unit || "mm"})</span>
+              <div className="actions">
+                <input
+                  inputMode="decimal"
+                  aria-label="Largura da coluna"
+                  value={selectedElement.width || ""}
+                  onChange={(event) =>
+                    setElements((items) =>
+                      items.map((item) =>
+                        item.id === selectedElement.id
+                          ? { ...item, width: Number(event.target.value) || 0 }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+                <input
+                  inputMode="decimal"
+                  aria-label="Comprimento da coluna"
+                  value={selectedElement.height || ""}
+                  onChange={(event) =>
+                    setElements((items) =>
+                      items.map((item) =>
+                        item.id === selectedElement.id
+                          ? { ...item, height: Number(event.target.value) || 0 }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </div>
+            </div>
           )}
           {selected?.kind === "text" && (
             <label className="field">
