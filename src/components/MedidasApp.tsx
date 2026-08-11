@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, now, queue, uid } from "../database/local/db";
 import type {
@@ -118,6 +118,13 @@ export function MedidasApp() {
   );
   const selectedEnvironment = envs.find(
     (item) => item.id === selectedEnvironmentId,
+  );
+  const selectedEnvironmentPlan = useLiveQuery<FloorPlanRecord | undefined>(
+    () =>
+      selectedEnvironmentId
+        ? db.floorPlans.where("environmentId").equals(selectedEnvironmentId).first()
+        : Promise.resolve(undefined),
+    [selectedEnvironmentId],
   );
   const goToNextEnvironment = () => {
     if (!selectedProjectEnvironments.length) return;
@@ -291,7 +298,11 @@ export function MedidasApp() {
                     disabled={!selectedEnvironment}
                     onClick={() => setSection("floorplan")}
                   >
-                    Desenhar planta
+                    {selectedEnvironmentPlan?.confirmed
+                      ? "Editar planta"
+                      : selectedEnvironmentPlan
+                        ? "Continuar planta"
+                        : "Desenhar planta"}
                   </button>
                   <button
                     className={`btn ${section === "editor" ? "primary" : ""}`}
@@ -2282,45 +2293,48 @@ function InteractiveFloorPlan({
     setConfirmed(plan?.confirmed || false);
     setHydratedEnvironment(environment.id);
   }, [environment, plan, hydratedEnvironment]);
+  const savePlan = useCallback(async (nextConfirmed: boolean) => {
+    if (!environment) return;
+    const existing = await db.floorPlans
+      .where("environmentId")
+      .equals(environment.id)
+      .first();
+    if (
+      !existing &&
+      !strokes.length &&
+      !points.length &&
+      !elements.length &&
+      !measurements.length &&
+      !texts.length
+    )
+      return;
+    const timestamp = now(),
+      id = existing?.id || uid();
+    await db.transaction("rw", db.floorPlans, db.syncOperations, async () => {
+      await db.floorPlans.put({
+        id,
+        environmentId: environment.id,
+        points: strokes[0] || points,
+        strokes,
+        strokeKinds,
+        elements,
+        measurements,
+        texts,
+        confirmed: nextConfirmed,
+        version: (existing?.version || 0) + 1,
+        createdAt: existing?.createdAt || timestamp,
+        updatedAt: timestamp,
+      });
+      await queue("floorPlan", id, existing ? "update" : "create");
+    });
+  }, [environment, strokes, points, strokeKinds, elements, measurements, texts]);
   useEffect(() => {
     if (!environment || hydratedEnvironment !== environment.id) return;
     const timer = setTimeout(async () => {
-      const existing = await db.floorPlans
-        .where("environmentId")
-        .equals(environment.id)
-        .first();
-      const timestamp = now(),
-        id = existing?.id || uid();
-      await db.transaction("rw", db.floorPlans, db.syncOperations, async () => {
-        await db.floorPlans.put({
-          id,
-          environmentId: environment.id,
-          points: strokes[0] || points,
-          strokes,
-          strokeKinds,
-          elements,
-          measurements,
-          texts,
-          confirmed,
-          version: (existing?.version || 0) + 1,
-          createdAt: existing?.createdAt || timestamp,
-          updatedAt: timestamp,
-        });
-        await queue("floorPlan", id, existing ? "update" : "create");
-      });
+      await savePlan(confirmed);
     }, 350);
     return () => clearTimeout(timer);
-  }, [
-    points,
-    strokes,
-    strokeKinds,
-    elements,
-    measurements,
-    texts,
-    confirmed,
-    environment,
-    hydratedEnvironment,
-  ]);
+  }, [confirmed, environment, hydratedEnvironment, savePlan]);
   function nearestWallPlacement(point: { x: number; y: number }) {
     let best:
       | {
@@ -3699,9 +3713,10 @@ function InteractiveFloorPlan({
               !confirmed &&
               measurements.some((measurement) => !measurement.value)
             }
-            onClick={() => {
+            onClick={async () => {
               if (confirmed) setConfirmed(false);
               else {
+                await savePlan(true);
                 setConfirmed(true);
                 onConfirmed();
               }

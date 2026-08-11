@@ -224,3 +224,17 @@ test("planta usa letras externas, colunas livres e cotas finas em tamanho 12", a
   assert.match(models, /drawWidth\?: number/);
   assert.match(models, /drawHeight\?: number/);
 });
+
+test("planta salva permanece anexada ao ambiente e reabre para ediÃ§Ã£o", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /selectedEnvironmentPlan\?\.confirmed/);
+  assert.match(app, /"Editar planta"/);
+  assert.match(app, /"Continuar planta"/);
+  assert.match(app, /const savePlan = useCallback/);
+  assert.match(app, /await savePlan\(true\)/);
+  assert.match(app, /environmentId: environment\.id/);
+  assert.match(app, /if \(\s*!existing &&\s*!strokes\.length/);
+});
