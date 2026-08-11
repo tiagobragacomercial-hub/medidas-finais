@@ -89,11 +89,13 @@ test("cadastro de cliente e projeto usa um fluxo único", async () => {
 });
 
 test("editor de medidas remove a ferramenta em L e oferece desfazer", async () => {
-  const app = await readFile(
-    new URL("../src/components/MedidasApp.tsx", import.meta.url),
-    "utf8",
-  );
+  const [app, catalog] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/annotations/catalog.ts", import.meta.url), "utf8"),
+  ]);
   assert.doesNotMatch(app, /\["linear", "↔ Medida"\]/);
+  assert.doesNotMatch(app, /Informe a segunda medida/);
+  assert.doesNotMatch(catalog, /l-shape/);
   assert.match(app, /Desfazer última ação/);
 });
 

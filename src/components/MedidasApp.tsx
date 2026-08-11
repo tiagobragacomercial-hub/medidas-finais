@@ -1281,7 +1281,6 @@ function Editor({
       return;
     }
     let value = "",
-      secondaryValue: string | undefined,
       description = "";
     if (tool === "text") {
       value = prompt("Digite o texto:", "") ?? "";
@@ -1310,21 +1309,10 @@ function Editor({
       }
       value = parsed.data;
       description = prompt("Descrição da medida (opcional):", "")?.trim() || "";
-      if (tool === "l") {
-        const second = prompt("Informe a segunda medida:", "") ?? "",
-          parsedSecond = measurementValueSchema.safeParse(second.trim());
-        if (!parsedSecond.success) {
-          notify("Segunda medida inválida");
-          return setDraftPoints([]);
-        }
-        secondaryValue = parsedSecond.data;
-      }
     }
     const finalPoints =
       config.type === "linear"
         ? points.slice(0, 2)
-        : tool === "l"
-        ? [points[0], { x: points[1].x, y: points[0].y }, points[1]]
         : points;
     const id = uid();
     await db.annotations.put({
@@ -1336,7 +1324,6 @@ function Editor({
       points: finalPoints,
       labelPoint: config.type === "linear" ? points[2] : undefined,
       value,
-      secondaryValue,
       textPosition: "above",
       description,
       layer: anns.length + 1,
