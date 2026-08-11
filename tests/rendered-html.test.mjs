@@ -206,3 +206,21 @@ test("traço livre é classificado e retificado ao terminar o gesto", async () =
   assert.match(geometry, /"straight" \| "curve" \| "mixed"/);
   assert.match(geometry, /function perpendicularDistance/);
 });
+
+test("planta usa letras externas, colunas livres e cotas finas em tamanho 12", async () => {
+  const [app, models] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/types/models.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(app, /planCenter/);
+  assert.match(app, /candidateA/);
+  assert.match(app, /\{wallCode\(index\)\}/);
+  assert.match(app, /columnStart/);
+  assert.match(app, /Desenhe o tamanho livremente/);
+  assert.doesNotMatch(app, /aria-label="Largura da coluna"/);
+  assert.doesNotMatch(app, /aria-label="Comprimento da coluna"/);
+  assert.match(app, /fontSize="12"/);
+  assert.match(app, /strokeWidth="1\.5"/);
+  assert.match(models, /drawWidth\?: number/);
+  assert.match(models, /drawHeight\?: number/);
+});

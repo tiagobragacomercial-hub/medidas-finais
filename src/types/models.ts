@@ -135,6 +135,8 @@ export interface FloorPlanElement {
   photoId?: string;
   width?: number;
   height?: number;
+  drawWidth?: number;
+  drawHeight?: number;
 }
 export interface FloorPlanMeasurement {
   id: string;

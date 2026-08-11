@@ -2203,6 +2203,13 @@ function InteractiveFloorPlan({
     [doorType, setDoorType] = useState<
       NonNullable<FloorPlanElement["doorType"]>
     >("swing"),
+    [columnShape, setColumnShape] = useState<
+      NonNullable<FloorPlanElement["shape"]>
+    >("rectangle"),
+    [columnStart, setColumnStart] = useState<{
+      x: number;
+      y: number;
+    } | null>(null),
     [confirmed, setConfirmed] = useState(false),
     [hydratedEnvironment, setHydratedEnvironment] = useState(""),
     [selected, setSelected] = useState<
@@ -2508,49 +2515,34 @@ function InteractiveFloorPlan({
         setSelected({ kind: "text", id });
       }
     } else if (mode === "column") {
-      const choice = prompt(
-        "Formato da coluna: retangular, quadrada ou redonda",
-        "retangular",
-      )?.trim().toLocaleLowerCase("pt-BR");
-      if (!choice) return;
-      const shape = choice.startsWith("red")
-        ? "circle"
-        : choice.startsWith("quad")
-          ? "square"
-          : "rectangle";
-      const width = prompt(
-        shape === "circle"
-          ? "Diâmetro da coluna:"
-          : shape === "square"
-            ? "Medida do lado da coluna:"
-            : "Largura da coluna:",
-        "300",
-      );
-      if (width === null) return;
-      const height =
-        shape === "rectangle"
-          ? prompt("Profundidade da coluna:", "300")
-          : width;
-      if (height === null) return;
-      const parsedWidth = measurementValueSchema.safeParse(width.trim()),
-        parsedHeight = measurementValueSchema.safeParse(height.trim());
-      if (!parsedWidth.success || !parsedHeight.success) {
-        alert("Informe largura e comprimento usando somente números.");
+      if (!columnStart) {
+        setColumnStart(p);
+        setMeasurementPreview(p);
         return;
       }
-      const id = uid();
+      const rawWidth = Math.max(0.02, Math.abs(p.x - columnStart.x)),
+        rawHeight = Math.max(0.03, Math.abs(p.y - columnStart.y)),
+        squarePixels = Math.max(rawWidth * 1000, rawHeight * 600),
+        drawWidth =
+          columnShape === "rectangle" ? rawWidth : squarePixels / 1000,
+        drawHeight =
+          columnShape === "rectangle" ? rawHeight : squarePixels / 600,
+        id = uid();
       setElements((items) => [
         ...items,
         {
           id,
           type: "column",
-          ...p,
-          shape,
-          width: Number(parsedWidth.data),
-          height: Number(parsedHeight.data),
+          x: (columnStart.x + p.x) / 2,
+          y: (columnStart.y + p.y) / 2,
+          shape: columnShape,
+          drawWidth,
+          drawHeight,
           locked: false,
         },
       ]);
+      setColumnStart(null);
+      setMeasurementPreview(null);
       setSelected({ kind: "element", id });
       setActionHistory((items) => [...items, "element"]);
     } else if (
@@ -2623,6 +2615,8 @@ function InteractiveFloorPlan({
   function moveSelected(e: React.PointerEvent<SVGSVGElement>) {
     const p = pointerPosition(e);
     if (sequenceStart && mode === "wall" && !confirmed)
+      setMeasurementPreview(p);
+    if (columnStart && mode === "column" && !confirmed)
       setMeasurementPreview(p);
     if (measurementStart && mode === "measure" && !confirmed)
       setMeasurementPreview(p);
@@ -2810,7 +2804,18 @@ function InteractiveFloorPlan({
           start: stroke[index],
           end,
         })),
-  );
+    ),
+    allWallPoints = strokes.flat(),
+    planCenter = allWallPoints.length
+      ? {
+          x:
+            allWallPoints.reduce((sum, point) => sum + point.x, 0) /
+            allWallPoints.length,
+          y:
+            allWallPoints.reduce((sum, point) => sum + point.y, 0) /
+            allWallPoints.length,
+        }
+      : { x: 0.5, y: 0.5 };
   return (
     <>
       <Head
@@ -2873,28 +2878,48 @@ function InteractiveFloorPlan({
                   </g>
                 );
               })}
-              {wallSegments.map((segment, index) => (
-                <g key={`wall-label-${index}`} pointerEvents="none">
-                  <rect
-                    x={((segment.start.x + segment.end.x) / 2) * 1000 - 42}
-                    y={((segment.start.y + segment.end.y) / 2) * 600 - 24}
-                    width="84"
-                    height="28"
-                    rx="14"
-                    fill="#ffffff"
-                    stroke="#b8d9f5"
-                  />
-                  <text
-                    x={((segment.start.x + segment.end.x) / 2) * 1000}
-                    y={((segment.start.y + segment.end.y) / 2) * 600 - 5}
-                    textAnchor="middle"
-                    fill="#075da9"
-                    fontWeight="800"
-                  >
-                    Parede {wallCode(index)}
-                  </text>
-                </g>
-              ))}
+              {wallSegments.map((segment, index) => {
+                const middle = {
+                    x: (segment.start.x + segment.end.x) / 2,
+                    y: (segment.start.y + segment.end.y) / 2,
+                  },
+                  dx = segment.end.x - segment.start.x,
+                  dy = segment.end.y - segment.start.y,
+                  length = Math.hypot(dx * 1000, dy * 600) || 1,
+                  normal = { x: (-dy * 600) / length, y: (dx * 1000) / length },
+                  candidateA = {
+                    x: middle.x + normal.x * 0.035,
+                    y: middle.y + normal.y * 0.058,
+                  },
+                  candidateB = {
+                    x: middle.x - normal.x * 0.035,
+                    y: middle.y - normal.y * 0.058,
+                  },
+                  distanceA = Math.hypot(candidateA.x - planCenter.x, candidateA.y - planCenter.y),
+                  distanceB = Math.hypot(candidateB.x - planCenter.x, candidateB.y - planCenter.y),
+                  label = distanceA >= distanceB ? candidateA : candidateB;
+                return (
+                  <g key={`wall-label-${index}`} pointerEvents="none">
+                    <circle
+                      cx={label.x * 1000}
+                      cy={label.y * 600}
+                      r="15"
+                      fill="#ffffff"
+                      stroke="#b8d9f5"
+                    />
+                    <text
+                      x={label.x * 1000}
+                      y={label.y * 600 + 4}
+                      textAnchor="middle"
+                      fill="#075da9"
+                      fontSize="12"
+                      fontWeight="800"
+                    >
+                      {wallCode(index)}
+                    </text>
+                  </g>
+                );
+              })}
               {measurements.map((measurement) => {
                 const selectedMeasurement =
                     selected?.kind === "measurement" &&
@@ -2937,7 +2962,7 @@ function InteractiveFloorPlan({
                       x2={dimensionX1}
                       y2={dimensionY1}
                       stroke={measurement.color || "#d12f2f"}
-                      strokeWidth="2"
+                      strokeWidth="1.5"
                       opacity="0.75"
                       pointerEvents="none"
                     />
@@ -2947,7 +2972,7 @@ function InteractiveFloorPlan({
                       x2={dimensionX2}
                       y2={dimensionY2}
                       stroke={measurement.color || "#d12f2f"}
-                      strokeWidth="2"
+                      strokeWidth="1.5"
                       opacity="0.75"
                       pointerEvents="none"
                     />
@@ -2957,7 +2982,7 @@ function InteractiveFloorPlan({
                       x2={dimensionX2}
                       y2={dimensionY2}
                       stroke={selectedMeasurement ? "#f59e0b" : measurement.color || "#d12f2f"}
-                      strokeWidth={selectedMeasurement ? 6 : 4}
+                      strokeWidth="2"
                       pointerEvents="stroke"
                       onPointerDown={(event) => {
                         event.stopPropagation();
@@ -2976,7 +3001,7 @@ function InteractiveFloorPlan({
                         x2={tick.x + normalX * 10}
                         y2={tick.y + normalY * 10}
                         stroke={measurement.color || "#d12f2f"}
-                        strokeWidth="3"
+                        strokeWidth="2"
                         pointerEvents="none"
                       />
                     ))}
@@ -3011,10 +3036,10 @@ function InteractiveFloorPlan({
                       />
                     ))}
                     <rect
-                      x={labelX - 48}
-                      y={labelY - 22}
-                      width="96"
-                      height="28"
+                      x={labelX - 44}
+                      y={labelY - 17}
+                      width="88"
+                      height="22"
                       rx="6"
                       fill="#fff"
                       stroke={measurement.color || "#d12f2f"}
@@ -3035,6 +3060,7 @@ function InteractiveFloorPlan({
                       y={labelY - 3}
                       textAnchor="middle"
                       fill={measurement.color || "#9f1f1f"}
+                      fontSize="12"
                       fontWeight="700"
                       style={{ pointerEvents: "none" }}
                     >
@@ -3094,7 +3120,7 @@ function InteractiveFloorPlan({
                       x2={measurementPreview.x * 1000}
                       y2={measurementPreview.y * 600}
                       stroke="#f59e0b"
-                      strokeWidth="5"
+                      strokeWidth="2"
                       strokeDasharray="14 9"
                     />
                   )}
@@ -3129,9 +3155,9 @@ function InteractiveFloorPlan({
                       dimensionY2 = y2 + normalY * offset;
                     return (
                       <>
-                        <line x1={x1} y1={y1} x2={dimensionX1} y2={dimensionY1} stroke="#f59e0b" strokeWidth="2" />
-                        <line x1={x2} y1={y2} x2={dimensionX2} y2={dimensionY2} stroke="#f59e0b" strokeWidth="2" />
-                        <line x1={dimensionX1} y1={dimensionY1} x2={dimensionX2} y2={dimensionY2} stroke="#f59e0b" strokeWidth="5" />
+                        <line x1={x1} y1={y1} x2={dimensionX1} y2={dimensionY1} stroke="#f59e0b" strokeWidth="1.5" />
+                        <line x1={x2} y1={y2} x2={dimensionX2} y2={dimensionY2} stroke="#f59e0b" strokeWidth="1.5" />
+                        <line x1={dimensionX1} y1={dimensionY1} x2={dimensionX2} y2={dimensionY2} stroke="#f59e0b" strokeWidth="2" />
                       </>
                     );
                   })()}
@@ -3156,6 +3182,20 @@ function InteractiveFloorPlan({
                     />
                   )}
                 </g>
+              )}
+              {columnStart && mode === "column" && measurementPreview && (
+                <rect
+                  x={Math.min(columnStart.x, measurementPreview.x) * 1000}
+                  y={Math.min(columnStart.y, measurementPreview.y) * 600}
+                  width={Math.abs(measurementPreview.x - columnStart.x) * 1000}
+                  height={Math.abs(measurementPreview.y - columnStart.y) * 600}
+                  rx={columnShape === "circle" ? 999 : 0}
+                  fill="#dce6ee"
+                  fillOpacity="0.65"
+                  stroke="#f59e0b"
+                  strokeWidth="4"
+                  pointerEvents="none"
+                />
               )}
               {sequenceStart && mode === "wall" && measurementPreview && (
                 <g pointerEvents="none">
@@ -3253,7 +3293,13 @@ function InteractiveFloorPlan({
                     <g>
                       {el.shape === "circle" ? (
                         <circle
-                          r={Math.max(24, (el.width || 300) / 6)}
+                          r={Math.max(
+                            24,
+                            Math.min(
+                              (el.drawWidth || 0.08) * 1000,
+                              (el.drawHeight || 0.13) * 600,
+                            ) / 2,
+                          )}
                           fill="#dce6ee"
                           stroke={
                             selected?.kind === "element" && selected.id === el.id
@@ -3264,10 +3310,10 @@ function InteractiveFloorPlan({
                         />
                       ) : (
                       <rect
-                        x={-Math.max(24, (el.width || 300) / 12)}
-                        y={-Math.max(24, (el.height || 300) / 12)}
-                        width={Math.max(48, (el.width || 300) / 6)}
-                        height={Math.max(48, (el.height || 300) / 6)}
+                        x={-Math.max(24, ((el.drawWidth || 0.08) * 1000) / 2)}
+                        y={-Math.max(24, ((el.drawHeight || 0.13) * 600) / 2)}
+                        width={Math.max(48, (el.drawWidth || 0.08) * 1000)}
+                        height={Math.max(48, (el.drawHeight || 0.13) * 600)}
                           fill="#dce6ee"
                           stroke={
                             selected?.kind === "element" && selected.id === el.id
@@ -3277,9 +3323,6 @@ function InteractiveFloorPlan({
                           strokeWidth="5"
                         />
                       )}
-                      <text y="5" textAnchor="middle" fontWeight="700">
-                        {el.width} × {el.height}
-                      </text>
                     </g>
                   )}
                   {el.type === "door" && (
@@ -3388,6 +3431,7 @@ function InteractiveFloorPlan({
                   }
                   setMeasurementStart(null);
                   setMeasurementEnd(null);
+                  setColumnStart(null);
                   setMeasurementPreview(null);
                 }}
               >
@@ -3429,6 +3473,26 @@ function InteractiveFloorPlan({
                 <option value="folding">Articulada</option>
                 <option value="accordion">Sanfonada</option>
               </select>
+            </label>
+          )}
+          {mode === "column" && (
+            <label className="field">
+              <span>Formato da próxima coluna</span>
+              <select
+                value={columnShape}
+                onChange={(event) =>
+                  setColumnShape(
+                    event.target.value as NonNullable<
+                      FloorPlanElement["shape"]
+                    >,
+                  )
+                }
+              >
+                <option value="rectangle">Retangular</option>
+                <option value="square">Quadrada</option>
+                <option value="circle">Redonda</option>
+              </select>
+              <small>Desenhe o tamanho livremente; adicione as cotas depois.</small>
             </label>
           )}
           <div className="actions floorplan-actions">
@@ -3763,7 +3827,7 @@ function InteractiveFloorPlan({
           )}
           {selectedElement?.type === "column" && (
             <div className="field">
-              <span>Medidas da coluna ({floorPlanProject?.unit || "mm"})</span>
+              <span>Coluna desenhada livremente</span>
               <button
                 type="button"
                 className={`btn ${selectedElement.locked ? "primary" : ""}`}
@@ -3780,38 +3844,7 @@ function InteractiveFloorPlan({
                 <Lock size={14} />
                 {selectedElement.locked ? "Destravar coluna" : "Travar coluna"}
               </button>
-              <div className="actions">
-                <input
-                  inputMode="decimal"
-                  aria-label="Largura da coluna"
-                  disabled={selectedElement.locked}
-                  value={selectedElement.width || ""}
-                  onChange={(event) =>
-                    setElements((items) =>
-                      items.map((item) =>
-                        item.id === selectedElement.id
-                          ? { ...item, width: Number(event.target.value) || 0 }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-                <input
-                  inputMode="decimal"
-                  aria-label="Comprimento da coluna"
-                  disabled={selectedElement.locked}
-                  value={selectedElement.height || ""}
-                  onChange={(event) =>
-                    setElements((items) =>
-                      items.map((item) =>
-                        item.id === selectedElement.id
-                          ? { ...item, height: Number(event.target.value) || 0 }
-                          : item,
-                      ),
-                    )
-                  }
-                />
-              </div>
+              <small>Use a ferramenta de medida para informar suas dimensões.</small>
             </div>
           )}
           {selected?.kind === "text" && (
@@ -3884,6 +3917,7 @@ function InteractiveFloorPlan({
               setTexts([]);
               setMeasurementStart(null);
               setMeasurementEnd(null);
+              setColumnStart(null);
               setMeasurementPreview(null);
               setConfirmed(false);
             }}
