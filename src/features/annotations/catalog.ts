@@ -14,20 +14,22 @@ export function nextCode(tool: AnnotationTool, annotations: Annotation[]) {
     count = annotations.filter((a) => a.code.startsWith(prefix)).length + 1;
   return `${prefix}${String(count).padStart(2, "0")}`;
 }
-export const technicalCategories = [
-  "Tomada",
-  "Interruptor",
-  "Água fria",
-  "Água quente",
-  "Esgoto",
-  "Gás",
-  "Ventilação",
-  "Ar-condicionado",
-  "Porta",
-  "Janela",
-  "Gesso",
-  "Piso",
-  "Coluna",
-  "Equipamento",
-  "Outro",
+export const technicalSymbols = [
+  { id: "outlet-low", label: "Tomada baixa" },
+  { id: "outlet-medium", label: "Tomada média" },
+  { id: "outlet-high", label: "Tomada alta" },
+  { id: "outlet-floor", label: "Tomada de piso" },
+  { id: "outlet-ceiling", label: "Tomada de teto" },
+  { id: "switch-single", label: "Interruptor simples" },
+  { id: "switch-double", label: "Interruptor duplo" },
+  { id: "switch-triple", label: "Interruptor triplo" },
+  { id: "phone-tv", label: "Telefone / TV a cabo" },
+  { id: "intercom", label: "Interfone" },
+  { id: "bell", label: "Campainha" },
+  { id: "sconce", label: "Arandela" },
+  { id: "light-panel", label: "Quadro geral de luz" },
+  { id: "cold-water", label: "Água fria" },
+  { id: "hot-water", label: "Água quente" },
+  { id: "sewer", label: "Saída de esgoto parede" },
+  { id: "gas", label: "Ponto de gás" },
 ] as const;

@@ -215,6 +215,29 @@ test("medida da foto usa dois pontos e posicionamento da cota como a planta", as
   assert.match(app, /zIndex: 10/);
 });
 
+test("foto oferece somente os símbolos técnicos da referência com legenda lateral", async () => {
+  const [app, catalog, models, exporter] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/annotations/catalog.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/types/models.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/photos/export-png.ts", import.meta.url), "utf8"),
+  ]);
+  for (const label of [
+    "Tomada baixa", "Tomada média", "Tomada alta", "Tomada de piso",
+    "Tomada de teto", "Interruptor simples", "Interruptor duplo",
+    "Interruptor triplo", "Telefone / TV a cabo", "Interfone", "Campainha",
+    "Arandela", "Quadro geral de luz", "Água fria", "Água quente",
+    "Saída de esgoto parede", "Ponto de gás",
+  ]) assert.match(catalog, new RegExp(label));
+  assert.doesNotMatch(catalog, /Ventilação|Ar-condicionado|Equipamento|Outro/);
+  assert.match(app, /function TechnicalSymbolIcon/);
+  assert.match(app, /aria-label="Símbolo técnico"/);
+  assert.match(app, /a\.type === "technical"/);
+  assert.match(models, /technicalSymbol\?: string/);
+  assert.match(exporter, /drawTechnicalSymbol/);
+  assert.match(exporter, /a\.type === "technical"/);
+});
+
 test("traço livre é classificado e retificado ao terminar o gesto", async () => {
   const [app, geometry] = await Promise.all([
     readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),

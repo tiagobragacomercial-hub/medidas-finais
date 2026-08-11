@@ -578,6 +578,24 @@ button {
 .point-marker.text {
   border-radius: 6px;
 }
+.technical-symbol-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 1px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: #fff;
+  touch-action: none;
+}
+.technical-symbol-marker.selected {
+  border-color: #0876db;
+  box-shadow: 0 0 0 3px #ffffffcc;
+}
 .angle-marker {
   padding: 4px 7px;
   border-radius: 6px;

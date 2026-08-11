@@ -69,6 +69,7 @@ export interface Annotation {
   strokeWidth?: number;
   fontSize?: number;
   locked?: boolean;
+  technicalSymbol?: string;
 }
 export interface SyncOperation {
   id: string;

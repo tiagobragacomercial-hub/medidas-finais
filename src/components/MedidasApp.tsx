@@ -44,7 +44,7 @@ import { measurementValueSchema } from "../schemas/entities";
 import {
   isAnnotationTool,
   nextCode,
-  technicalCategories,
+  technicalSymbols,
   toolConfig,
 } from "../features/annotations/catalog";
 import {
@@ -1119,6 +1119,7 @@ function Editor({
     } | null>(null),
     [wallIndex, setWallIndex] = useState(0),
     [uploadAsDetail, setUploadAsDetail] = useState(false),
+    [technicalSymbol, setTechnicalSymbol] = useState<string>(technicalSymbols[0].id),
     [measureColor, setMeasureColor] = useState("#ef3340"),
     [measureStrokeWidth, setMeasureStrokeWidth] = useState(2),
     [measureFontSize, setMeasureFontSize] = useState(12);
@@ -1289,11 +1290,8 @@ function Editor({
       description = prompt("Descrição da foto de detalhe:", "") ?? "";
     else if (tool === "point") {
       description =
-        prompt(
-          `Categoria: ${technicalCategories.join(", ")}`,
-          technicalCategories[0],
-        ) ?? "";
-      value = prompt("Valor informado (opcional):", "") ?? "";
+        technicalSymbols.find((item) => item.id === technicalSymbol)?.label ||
+        technicalSymbols[0].label;
     } else {
       value =
         prompt(
@@ -1332,6 +1330,7 @@ function Editor({
       strokeWidth: measureStrokeWidth,
       fontSize: measureFontSize,
       locked: false,
+      technicalSymbol: config.type === "technical" ? technicalSymbol : undefined,
     });
     await queue("annotation", id, "create");
     setDraftPoints([]);
@@ -1589,7 +1588,7 @@ function Editor({
           {[
             ["select", "↖ Selecionar"],
             ["angle", "∠ Ângulo"],
-            ["point", "⊙ Ponto técnico"],
+            ["point", "⊙ Símbolos técnicos"],
             ["text", "T Texto"],
             ["detail", "◉ Foto detalhe"],
           ].map(([id, label]) => (
@@ -1605,6 +1604,19 @@ function Editor({
               {label}
             </button>
           ))}
+          {tool === "point" && (
+            <select
+              aria-label="Símbolo técnico"
+              value={technicalSymbol}
+              onChange={(event) => setTechnicalSymbol(event.target.value)}
+            >
+              {technicalSymbols.map((symbol) => (
+                <option key={symbol.id} value={symbol.id}>
+                  {symbol.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="canvaswrap">
           <div
@@ -1768,9 +1780,16 @@ function Editor({
               className={`annotation-item ${a.id === selected ? "selected" : ""}`}
               onClick={() => setSelected(a.id)}
             >
-              <strong>
-                {a.code} · {a.value || "Pendente"}
-              </strong>
+              {a.type === "technical" ? (
+                <strong style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <TechnicalSymbolIcon symbol={a.technicalSymbol} size={24} />
+                  {a.description}
+                </strong>
+              ) : (
+                <strong>
+                  {a.code} · {a.value || "Pendente"}
+                </strong>
+              )}
               <small style={{ display: "block" }}>
                 {a.state === "protected" ? "Protegida" : "Em edição"}
               </small>
@@ -1797,9 +1816,11 @@ function Editor({
                     <Lock size={13} />
                     {a.locked ? "Destravar" : "Travar"}
                   </button>
-                  <button className="btn" disabled={a.locked} onClick={() => edit(a)}>
-                    Editar medida
-                  </button>
+                  {!["technical", "text", "detail"].includes(a.type) && (
+                    <button className="btn" disabled={a.locked} onClick={() => edit(a)}>
+                      Editar medida
+                    </button>
+                  )}
                   <button
                     className="btn danger"
                     disabled={a.locked}
@@ -2004,6 +2025,31 @@ function EnvironmentVideo({ media }: { media: Photo }) {
   );
 }
 
+function TechnicalSymbolIcon({ symbol, size = 28 }: { symbol?: string; size?: number }) {
+  const red = "#ef3340", blue = "#1769d2", green = "#18a83b";
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+      {symbol === "outlet-low" && <path d="M7 5 25 16 7 27Z" fill="white" stroke={red} strokeWidth="2" />}
+      {symbol === "outlet-medium" && <><path d="M7 5 25 16 7 27Z" fill="white" stroke={red} strokeWidth="2" /><path d="M7 16H25L7 27Z" fill={red} /></>}
+      {symbol === "outlet-high" && <path d="M7 5 25 16 7 27Z" fill={red} />}
+      {symbol === "outlet-floor" && <><rect x="6" y="5" width="20" height="22" fill="white" stroke={red} strokeWidth="2" /><path d="m7 6 18 10L7 26" fill="none" stroke={red} strokeWidth="2" /></>}
+      {symbol === "outlet-ceiling" && <><rect x="6" y="5" width="20" height="22" fill="white" stroke={red} strokeWidth="2" /><path d="M6 5 26 16 6 27Z" fill={red} /></>}
+      {symbol === "switch-single" && <circle cx="16" cy="16" r="11" fill="white" stroke={red} strokeWidth="2" />}
+      {symbol === "switch-double" && <><circle cx="16" cy="16" r="11" fill="white" stroke={red} strokeWidth="2" /><path d="M16 5v22" stroke={red} strokeWidth="2" /></>}
+      {symbol === "switch-triple" && <><circle cx="16" cy="16" r="11" fill="white" stroke={red} strokeWidth="2" /><path d="M16 16 9 7m7 9 10-1m-10 1-5 10" stroke={red} strokeWidth="2" /></>}
+      {symbol === "phone-tv" && <path d="M25 5 7 16l18 11Z" fill="white" stroke={red} strokeWidth="2" />}
+      {symbol === "intercom" && <><path d="M8 5v22" stroke={red} strokeWidth="2" /><path d="m8 10 16-6v24L8 22" fill="white" stroke={red} strokeWidth="2" /></>}
+      {symbol === "bell" && <><rect x="7" y="7" width="18" height="19" fill="white" stroke={red} strokeWidth="2" /><path d="m9 7 7-4" stroke={red} strokeWidth="2" /></>}
+      {symbol === "sconce" && <path d="M10 5v22a11 11 0 0 0 0-22Z" fill="white" stroke={red} strokeWidth="2" />}
+      {symbol === "light-panel" && <path d="M5 20 27 10v12H5Z" fill={red} />}
+      {symbol === "cold-water" && <><circle cx="16" cy="16" r="11" fill="white" stroke={blue} strokeWidth="2" /><path d="M5 16h22A11 11 0 0 0 5 16Z" fill={blue} /></>}
+      {symbol === "hot-water" && <><circle cx="16" cy="16" r="11" fill="white" stroke={blue} strokeWidth="2" /><path d="M5 5h11v11H5Zm11 11h11v11H16Z" fill={blue} /></>}
+      {symbol === "sewer" && <circle cx="16" cy="16" r="11" fill={blue} />}
+      {symbol === "gas" && <text x="16" y="23" textAnchor="middle" fill={green} fontSize="21" fontWeight="700">G</text>}
+    </svg>
+  );
+}
+
 function Measure({
   a,
   selected,
@@ -2018,7 +2064,29 @@ function Measure({
   showHandles: boolean;
 }) {
   const selectionTimer = useRef<number | null>(null);
-  if (a.type === "technical" || a.type === "detail" || a.type === "text") {
+  if (a.type === "technical") {
+    const p = a.points[0];
+    return (
+      <button
+        className={`technical-symbol-marker ${selected ? "selected" : ""}`}
+        onClick={click}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          startDrag("label");
+        }}
+        data-annotation-control
+        style={{
+          left: `${(a.labelPoint?.x ?? p.x) * 100}%`,
+          top: `${(a.labelPoint?.y ?? p.y) * 100}%`,
+        }}
+        aria-label={a.description}
+      >
+        <TechnicalSymbolIcon symbol={a.technicalSymbol} />
+      </button>
+    );
+  }
+  if (a.type === "detail" || a.type === "text") {
     const p = a.points[0];
     return (
       <button
