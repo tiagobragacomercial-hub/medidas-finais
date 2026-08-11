@@ -119,6 +119,12 @@ export interface FloorPlanElement {
   y: number;
   direction?: number;
   flipped?: boolean;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
+  shape?: "rectangle" | "square" | "circle";
+  variant?: "bathroom" | "standard";
+  locked?: boolean;
+  wallIndex?: number;
   photoId?: string;
   width?: number;
   height?: number;

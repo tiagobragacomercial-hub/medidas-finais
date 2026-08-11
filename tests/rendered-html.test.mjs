@@ -82,9 +82,10 @@ test("cadastro de cliente e projeto usa um fluxo único", async () => {
     new URL("../src/components/MedidasApp.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(app, /Criar cliente e projeto/);
+  assert.match(app, /Cadastro único do levantamento/);
   assert.match(app, /Responsável/);
-  assert.match(app, /Primeiro ambiente/);
+  assert.match(app, /Ambientes que serão medidos/);
+  assert.match(app, /openModal\("client-project"\)/);
 });
 
 test("editor de medidas remove a ferramenta em L e oferece desfazer", async () => {
@@ -96,7 +97,7 @@ test("editor de medidas remove a ferramenta em L e oferece desfazer", async () =
   assert.match(app, /Desfazer última ação/);
 });
 
-test("planta aceita traços contínuos e componentes de porta e janela", async () => {
+test("planta aceita paredes sequenciais e componentes de porta e janela", async () => {
   const [app, models] = await Promise.all([
     readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/types/models.ts", import.meta.url), "utf8"),
@@ -106,13 +107,36 @@ test("planta aceita traços contínuos e componentes de porta e janela", async (
   assert.match(app, /strokeLinecap="round"/);
   assert.match(app, /Ajustar retas e quinas/);
   assert.match(app, /Desenhar paredes/);
+  assert.match(app, /sequenceStart/);
   assert.match(app, /mode === "curve"/);
   assert.match(app, /Adicionar ponto/);
   assert.match(app, /A 48 48/);
   assert.match(app, /el\.type === "window"/);
   assert.match(app, /floor-grid-large/);
-  assert.match(app, /Inverter abertura da porta/);
+  assert.match(app, /Inverter horizontalmente/);
+  assert.match(app, /Inverter verticalmente/);
   assert.match(app, /Girar 90°/);
+  assert.match(app, /Curvar parede selecionada/);
+  assert.match(app, /Janela banheiro 40 cm/);
+  assert.match(app, /Janela padrão 110 cm/);
+  assert.match(app, /millimeters = isDoor/);
+  assert.match(models, /flipHorizontal\?: boolean/);
+  assert.match(models, /flipVertical\?: boolean/);
+  assert.match(models, /shape\?: "rectangle" \| "square" \| "circle"/);
+});
+
+test("estilo escolhido passa a valer para todas as medidas das fotos", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /applyAnnotationStyle/);
+  assert.match(app, /medidas-finais-annotation-style/);
+  assert.match(app, /Cor de todas/);
+  assert.match(app, /Linha de todas/);
+  assert.match(app, /Letra de todas/);
+  assert.match(app, /window\.setTimeout\(click, 2000\)/);
+  assert.match(app, /Salvar e finalizar/);
 });
 
 test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () => {

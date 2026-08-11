@@ -31,7 +31,7 @@ export function supabaseConfigured() {
 }
 
 export function getOwnerLoginEmail() {
-  return (process.env.NEXT_PUBLIC_OWNER_EMAIL || "proprietaria@medidasfinais.com").trim();
+  return (process.env.NEXT_PUBLIC_OWNER_EMAIL || "franluz.bj@gmail.com").trim();
 }
 
 export function getSupabase(): SupabaseClient {

@@ -38,7 +38,6 @@ import { exportAnnotatedPng } from "../features/photos/export-png";
 import {
   getAnnotationLabelPoint,
   getAnnotationSegments,
-  getLineAngle,
 } from "../features/photos/export-pdf";
 import { normalizePointer } from "../features/annotations/geometry";
 import { measurementValueSchema } from "../schemas/entities";
@@ -88,7 +87,6 @@ export function MedidasApp() {
   const [section, setSection] = useState<Section>("dashboard"),
     [selectedProjectId, setSelectedProjectId] = useState(""),
     [selectedEnvironmentId, setSelectedEnvironmentId] = useState(""),
-    [preferredClientId, setPreferredClientId] = useState(""),
     [modal, setModal] = useState<null | "client" | "project" | "environment" | "client-project">(
       null,
     ),
@@ -401,7 +399,6 @@ export function MedidasApp() {
           type={modal}
           clients={clients}
           projects={projects}
-          preferredClientId={preferredClientId}
           preferredProjectId={selectedProjectId}
           close={() => setModal(null)}
           saved={async ({ type, id, environmentId }) => {
@@ -411,9 +408,6 @@ export function MedidasApp() {
               setSelectedProjectId(id);
               setSelectedEnvironmentId(environmentId || "");
               setSection("floorplan");
-            } else if (type === "client") {
-              setPreferredClientId(id);
-              setModal("client-project");
             } else if (type === "project") {
               setModal(null);
               setSelectedProjectId(id);
@@ -733,7 +727,7 @@ function Projects({
         ))}
         {!projects.length && (
           <section className="card full empty">
-            Crie um cliente e depois o primeiro projeto.
+            Use o cadastro único para criar o cliente e iniciar o levantamento.
           </section>
         )}
       </div>
@@ -891,7 +885,7 @@ function Modal({
         <div className="cardhead">
           <h2>
             {type === "client-project"
-              ? "Criar cliente e projeto"
+              ? "Cadastro único do levantamento"
               : type === "client"
                 ? "Novo cliente"
                 : type === "project"
@@ -1041,7 +1035,7 @@ function Modal({
           <button className="btn primary">
             <Save size={16} />
             {type === "client-project"
-              ? "Criar cliente e projeto"
+              ? "Salvar e abrir levantamento"
               : type === "project"
                 ? "Criar e iniciar projeto"
                 : "Salvar no dispositivo"}
@@ -1113,7 +1107,10 @@ function Editor({
       target: "start" | "end" | "label" | "description";
     } | null>(null),
     [wallIndex, setWallIndex] = useState(0),
-    [uploadAsDetail, setUploadAsDetail] = useState(false);
+    [uploadAsDetail, setUploadAsDetail] = useState(false),
+    [measureColor, setMeasureColor] = useState("#ef3340"),
+    [measureStrokeWidth, setMeasureStrokeWidth] = useState(3),
+    [measureFontSize, setMeasureFontSize] = useState(16);
   const currentPlan = useLiveQuery<FloorPlanRecord | undefined>(
     () =>
       environmentId
@@ -1141,6 +1138,50 @@ function Editor({
   const file = useRef<HTMLInputElement>(null),
     cameraFile = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const saved = window.localStorage.getItem("medidas-finais-annotation-style");
+    if (!saved) return;
+    try {
+      const style = JSON.parse(saved) as {
+        color?: string;
+        strokeWidth?: number;
+        fontSize?: number;
+      };
+      if (style.color) setMeasureColor(style.color);
+      if (style.strokeWidth) setMeasureStrokeWidth(style.strokeWidth);
+      if (style.fontSize) setMeasureFontSize(style.fontSize);
+    } catch {}
+  }, []);
+  async function applyAnnotationStyle(style: {
+    color?: string;
+    strokeWidth?: number;
+    fontSize?: number;
+  }) {
+    const next = {
+      color: style.color || measureColor,
+      strokeWidth: style.strokeWidth || measureStrokeWidth,
+      fontSize: style.fontSize || measureFontSize,
+    };
+    setMeasureColor(next.color);
+    setMeasureStrokeWidth(next.strokeWidth);
+    setMeasureFontSize(next.fontSize);
+    window.localStorage.setItem(
+      "medidas-finais-annotation-style",
+      JSON.stringify(next),
+    );
+    const photoIds = environmentPhotos.map((item) => item.id);
+    if (!photoIds.length) return;
+    const existing = await db.annotations.where("photoId").anyOf(photoIds).toArray();
+    await db.transaction("rw", db.annotations, db.syncOperations, async () => {
+      for (const annotation of existing) {
+        await db.annotations.update(annotation.id, {
+          ...next,
+          updatedAt: now(),
+        });
+        await queue("annotation", annotation.id, "update");
+      }
+    });
+  }
   useEffect(() => {
     if (!wallPhotos.some((item) => item.id === photoId))
       setPhotoId(wallPhotos[0]?.id || "");
@@ -1282,9 +1323,9 @@ function Editor({
       layer: anns.length + 1,
       version: 1,
       updatedAt: now(),
-      color: "#ef3340",
-      strokeWidth: 3,
-      fontSize: 16,
+      color: measureColor,
+      strokeWidth: measureStrokeWidth,
+      fontSize: measureFontSize,
       locked: false,
     });
     await queue("annotation", id, "create");
@@ -1670,7 +1711,7 @@ function Editor({
                 notify("Imagem e medidas salvas");
               }}
             >
-              Salvar/Voltar
+              Salvar
             </button>
             <button
               className="btn primary"
@@ -1684,7 +1725,7 @@ function Editor({
                 );
               }}
             >
-              Salvar/Continuar
+              Salvar e finalizar
             </button>
           </div>
         </div>
@@ -1731,51 +1772,54 @@ function Editor({
                   <button className="btn" disabled={a.locked} onClick={() => edit(a)}>
                     Editar medida
                   </button>
+                  <button
+                    className="btn danger"
+                    disabled={a.locked}
+                    onClick={async () => {
+                      await db.annotations.delete(a.id);
+                      await queue("annotation", a.id, "delete");
+                      setSelected("");
+                      notify("Medida excluída");
+                    }}
+                  >
+                    Excluir medida
+                  </button>
                   <label className="compact-control">
-                    Cor
+                    Cor de todas
                     <input
                       type="color"
-                      value={a.color || "#ef3340"}
-                      disabled={a.locked}
-                      onChange={async (event) => {
-                        await db.annotations.update(a.id, {
-                          color: event.target.value,
-                          updatedAt: now(),
-                        });
-                        await queue("annotation", a.id, "update");
-                      }}
+                      value={measureColor}
+                      onChange={(event) =>
+                        void applyAnnotationStyle({ color: event.target.value })
+                      }
                     />
                   </label>
                   <label className="compact-control">
-                    Linha {a.strokeWidth || 3}px
+                    Linha de todas {measureStrokeWidth}px
                     <input
                       type="range"
                       min="1"
                       max="12"
-                      value={a.strokeWidth || 3}
-                      disabled={a.locked}
-                      onChange={async (event) => {
-                        await db.annotations.update(a.id, {
+                      value={measureStrokeWidth}
+                      onChange={(event) =>
+                        void applyAnnotationStyle({
                           strokeWidth: Number(event.target.value),
-                          updatedAt: now(),
-                        });
-                      }}
+                        })
+                      }
                     />
                   </label>
                   <label className="compact-control">
-                    Letra {a.fontSize || 16}px
+                    Letra de todas {measureFontSize}px
                     <input
                       type="range"
                       min="10"
                       max="36"
-                      value={a.fontSize || 16}
-                      disabled={a.locked}
-                      onChange={async (event) => {
-                        await db.annotations.update(a.id, {
+                      value={measureFontSize}
+                      onChange={(event) =>
+                        void applyAnnotationStyle({
                           fontSize: Number(event.target.value),
-                          updatedAt: now(),
-                        });
-                      }}
+                        })
+                      }
                     />
                   </label>
                   <button
@@ -1905,6 +1949,7 @@ function Measure({
   startDrag: (target: "start" | "end" | "label" | "description") => void;
   showHandles: boolean;
 }) {
+  const selectionTimer = useRef<number | null>(null);
   if (a.type === "technical" || a.type === "detail" || a.type === "text") {
     const p = a.points[0];
     return (
@@ -1988,9 +2033,22 @@ function Measure({
           pointerEvents: "auto",
           cursor: "pointer",
         }}
-        onClick={(event) => {
+        onPointerDown={(event) => {
           event.stopPropagation();
-          click();
+          if (event.pointerType === "mouse") click();
+          else {
+            selectionTimer.current = window.setTimeout(click, 2000);
+          }
+        }}
+        onPointerUp={() => {
+          if (selectionTimer.current)
+            window.clearTimeout(selectionTimer.current);
+          selectionTimer.current = null;
+        }}
+        onPointerCancel={() => {
+          if (selectionTimer.current)
+            window.clearTimeout(selectionTimer.current);
+          selectionTimer.current = null;
         }}
       />
       <button
@@ -2112,7 +2170,8 @@ function InteractiveFloorPlan({
       | "curve"
       | "point"
       | "door"
-      | "window"
+      | "window-bathroom"
+      | "window-standard"
       | "column"
       | "camera"
       | "measure"
@@ -2129,10 +2188,15 @@ function InteractiveFloorPlan({
       x: number;
       y: number;
     } | null>(null),
+    [sequenceStart, setSequenceStart] = useState<{
+      x: number;
+      y: number;
+    } | null>(null),
     [confirmed, setConfirmed] = useState(false),
     [hydratedEnvironment, setHydratedEnvironment] = useState(""),
     [selected, setSelected] = useState<
       | { kind: "point"; strokeIndex: number; index: number }
+      | { kind: "wall"; strokeIndex: number }
       | { kind: "element"; id: string }
       | { kind: "measurement"; id: string }
       | { kind: "text"; id: string }
@@ -2239,11 +2303,80 @@ function InteractiveFloorPlan({
     environment,
     hydratedEnvironment,
   ]);
+  function nearestWallPlacement(point: { x: number; y: number }) {
+    let best:
+      | {
+          point: { x: number; y: number };
+          direction: number;
+          wallIndex: number;
+          distance: number;
+        }
+      | undefined;
+    strokes.forEach((stroke, wallIndex) => {
+      if (stroke.length < 2) return;
+      const start = stroke[0], end = stroke[stroke.length - 1],
+        vx = end.x - start.x,
+        vy = end.y - start.y,
+        lengthSquared = vx * vx + vy * vy,
+        t = lengthSquared
+          ? Math.max(
+              0,
+              Math.min(
+                1,
+                ((point.x - start.x) * vx + (point.y - start.y) * vy) /
+                  lengthSquared,
+              ),
+            )
+          : 0,
+        projected = { x: start.x + vx * t, y: start.y + vy * t },
+        distance = Math.hypot(point.x - projected.x, point.y - projected.y),
+        direction = (Math.atan2(vy * 600, vx * 1000) * 180) / Math.PI;
+      if (!best || distance < best.distance)
+        best = { point: projected, direction, wallIndex, distance };
+    });
+    return best;
+  }
+  function snapPlanPoint(point: { x: number; y: number }) {
+    const candidates = [
+      ...strokes.flatMap((stroke) => [stroke[0], stroke.at(-1)]),
+      ...elements.flatMap((element) => {
+        const halfX = element.type === "column" ? 0.035 : 0,
+          halfY = element.type === "column" ? 0.05 : 0;
+        return [
+          { x: element.x, y: element.y },
+          { x: element.x - halfX, y: element.y - halfY },
+          { x: element.x + halfX, y: element.y - halfY },
+          { x: element.x - halfX, y: element.y + halfY },
+          { x: element.x + halfX, y: element.y + halfY },
+        ];
+      }),
+    ].filter((item): item is { x: number; y: number } => Boolean(item));
+    const nearest = candidates.reduce<
+      { point: { x: number; y: number }; distance: number } | undefined
+    >((best, candidate) => {
+      const distance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+      return !best || distance < best.distance
+        ? { point: candidate, distance }
+        : best;
+    }, undefined);
+    return nearest && nearest.distance < 0.045 ? nearest.point : point;
+  }
   function add(e: React.PointerEvent<SVGSVGElement>) {
     if (confirmed || !environment || e.target !== e.currentTarget) return;
     const r = e.currentTarget.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
-    if (mode === "wall" || mode === "curve") {
+    if (mode === "wall") {
+      if (!sequenceStart) {
+        setSequenceStart(p);
+        setMeasurementPreview(p);
+        return;
+      }
+      setStrokes((items) => [...items, [sequenceStart, p]]);
+      setStrokeKinds((items) => [...items, "polyline"]);
+      setSequenceStart(p);
+      setMeasurementPreview(p);
+      setActionHistory((items) => [...items, "wall"]);
+    } else if (mode === "curve") {
       setStrokes((items) => [...items, [p]]);
       setStrokeKinds((items) => [
         ...items,
@@ -2307,9 +2440,10 @@ function InteractiveFloorPlan({
         });
       }
     } else if (mode === "measure") {
+      const measurePoint = snapPlanPoint(p);
       if (!measurementStart) {
-        setMeasurementStart(p);
-        setMeasurementPreview(p);
+        setMeasurementStart(measurePoint);
+        setMeasurementPreview(measurePoint);
       } else {
         const informed = prompt("Agora informe o número real da medida:", "");
         if (informed === null) {
@@ -2328,7 +2462,7 @@ function InteractiveFloorPlan({
           {
             id,
             start: measurementStart,
-            end: p,
+            end: measurePoint,
             value: parsed.data,
             unit: floorPlanProject?.unit || "mm",
             color: "#d12f2f",
@@ -2349,9 +2483,29 @@ function InteractiveFloorPlan({
         setSelected({ kind: "text", id });
       }
     } else if (mode === "column") {
-      const width = prompt("Largura da coluna:", "300");
+      const choice = prompt(
+        "Formato da coluna: retangular, quadrada ou redonda",
+        "retangular",
+      )?.trim().toLocaleLowerCase("pt-BR");
+      if (!choice) return;
+      const shape = choice.startsWith("red")
+        ? "circle"
+        : choice.startsWith("quad")
+          ? "square"
+          : "rectangle";
+      const width = prompt(
+        shape === "circle"
+          ? "Diâmetro da coluna:"
+          : shape === "square"
+            ? "Medida do lado da coluna:"
+            : "Largura da coluna:",
+        "300",
+      );
       if (width === null) return;
-      const height = prompt("Comprimento da coluna:", "300");
+      const height =
+        shape === "rectangle"
+          ? prompt("Profundidade da coluna:", "300")
+          : width;
       if (height === null) return;
       const parsedWidth = measurementValueSchema.safeParse(width.trim()),
         parsedHeight = measurementValueSchema.safeParse(height.trim());
@@ -2366,8 +2520,62 @@ function InteractiveFloorPlan({
           id,
           type: "column",
           ...p,
+          shape,
           width: Number(parsedWidth.data),
           height: Number(parsedHeight.data),
+          locked: false,
+        },
+      ]);
+      setSelected({ kind: "element", id });
+      setActionHistory((items) => [...items, "element"]);
+    } else if (
+      mode === "door" ||
+      mode === "window-bathroom" ||
+      mode === "window-standard"
+    ) {
+      const placement = nearestWallPlacement(p);
+      const id = uid(),
+        isDoor = mode === "door",
+        millimeters = isDoor
+          ? 800
+          : mode === "window-bathroom"
+            ? 400
+            : 1100,
+        width =
+          floorPlanProject?.unit === "cm"
+            ? millimeters / 10
+            : floorPlanProject?.unit === "m"
+              ? millimeters / 1000
+              : millimeters;
+      setElements((items) => [
+        ...items,
+        {
+          id,
+          type: isDoor ? "door" : "window",
+          ...(placement?.point || p),
+          width,
+          direction: placement?.direction || 0,
+          wallIndex: placement?.wallIndex,
+          variant: isDoor
+            ? undefined
+            : mode === "window-bathroom"
+              ? "bathroom"
+              : "standard",
+          flipHorizontal: false,
+          flipVertical: false,
+        },
+      ]);
+      setSelected({ kind: "element", id });
+      setActionHistory((items) => [...items, "element"]);
+    } else if (mode === "camera") {
+      const id = uid(), placement = nearestWallPlacement(p);
+      setElements((items) => [
+        ...items,
+        {
+          id,
+          type: "camera",
+          ...(placement?.point || p),
+          wallIndex: placement?.wallIndex,
         },
       ]);
       setSelected({ kind: "element", id });
@@ -2388,9 +2596,11 @@ function InteractiveFloorPlan({
   }
   function moveSelected(e: React.PointerEvent<SVGSVGElement>) {
     const p = pointerPosition(e);
+    if (sequenceStart && mode === "wall" && !confirmed)
+      setMeasurementPreview(p);
     if (measurementStart && mode === "measure" && !confirmed)
       setMeasurementPreview(p);
-    if (drawingStroke && (mode === "wall" || mode === "curve") && !confirmed) {
+    if (drawingStroke && mode === "curve" && !confirmed) {
       setStrokes((items) => {
         const next = [...items],
           current = [...(next[next.length - 1] || [])],
@@ -2403,19 +2613,37 @@ function InteractiveFloorPlan({
       return;
     }
     if (!dragging || !selected || confirmed) return;
-    if (selected.kind === "point")
+    if (selected.kind === "wall") return;
+    if (selected.kind === "point") {
+      const original = strokes[selected.strokeIndex]?.[selected.index];
       setStrokes((items) =>
-        items.map((stroke, strokeIndex) =>
-          strokeIndex === selected.strokeIndex
-            ? stroke.map((item, index) => (index === selected.index ? p : item))
-            : stroke,
+        items.map((stroke) =>
+          stroke.map((item) =>
+            original &&
+            Math.hypot(item.x - original.x, item.y - original.y) < 0.0001
+              ? p
+              : item,
+          ),
         ),
       );
+    }
     else if (selected.kind === "element")
       setElements((items) =>
-        items.map((item) =>
-          item.id === selected.id ? { ...item, ...p } : item,
-        ),
+        items.map((item) => {
+          if (item.id !== selected.id || item.locked) return item;
+          if (item.type === "door" || item.type === "window") {
+            const placement = nearestWallPlacement(p);
+            return placement
+              ? {
+                  ...item,
+                  ...placement.point,
+                  direction: placement.direction,
+                  wallIndex: placement.wallIndex,
+                }
+              : { ...item, ...p };
+          }
+          return { ...item, ...p };
+        }),
       );
     else if (selected.kind === "measurement")
       setMeasurements((items) =>
@@ -2435,7 +2663,7 @@ function InteractiveFloorPlan({
       );
   }
   function finishCanvasGesture() {
-    if (drawingStroke) {
+    if (drawingStroke && mode === "curve") {
       setStrokes((items) =>
         items
           .map((stroke, index) =>
@@ -2460,7 +2688,45 @@ function InteractiveFloorPlan({
   }
   function removeSelected() {
     if (!selected || confirmed) return;
-    if (selected.kind === "point")
+    if (
+      selected.kind === "measurement" &&
+      measurements.find((item) => item.id === selected.id)?.locked
+    )
+      return;
+    if (
+      selected.kind === "element" &&
+      elements.find((item) => item.id === selected.id)?.locked
+    )
+      return;
+    if (selected.kind === "wall") {
+      const removal = prompt(
+        "Remover: 1 = somente a parede; 2 = parede, porta, janela e câmeras vinculadas",
+        "1",
+      );
+      if (removal === null) return;
+      const removedIndex = selected.strokeIndex;
+      setStrokes((items) =>
+        items.filter((_, strokeIndex) => strokeIndex !== removedIndex),
+      );
+      setStrokeKinds((items) =>
+        items.filter((_, strokeIndex) => strokeIndex !== removedIndex),
+      );
+      setElements((items) =>
+        items
+          .filter(
+            (item) => removal !== "2" || item.wallIndex !== removedIndex,
+          )
+          .map((item) => ({
+            ...item,
+            wallIndex:
+              item.wallIndex === removedIndex
+                ? undefined
+                : item.wallIndex !== undefined && item.wallIndex > removedIndex
+                  ? item.wallIndex - 1
+                  : item.wallIndex,
+          })),
+      );
+    } else if (selected.kind === "point")
       setStrokes((items) =>
         items
           .map((stroke, strokeIndex) =>
@@ -2482,7 +2748,13 @@ function InteractiveFloorPlan({
   function undoLast() {
     const last = actionHistory[actionHistory.length - 1];
     if (!last || confirmed) return;
-    if (last === "wall") setStrokes((items) => items.slice(0, -1));
+    if (last === "wall") {
+      setStrokes((items) => {
+        const next = items.slice(0, -1);
+        setSequenceStart(next.at(-1)?.at(-1) || null);
+        return next;
+      });
+    }
     if (last === "element") setElements((items) => items.slice(0, -1));
     if (last === "measurement")
       setMeasurements((items) => items.slice(0, -1));
@@ -2499,6 +2771,7 @@ function InteractiveFloorPlan({
     setTexts([]);
     setActionHistory([]);
     setSelected(null);
+    setSequenceStart(null);
   }
   const wallSegments = strokes.flatMap((stroke, strokeIndex) =>
     strokeKinds[strokeIndex] === "curve"
@@ -2553,11 +2826,21 @@ function InteractiveFloorPlan({
                             )
                       }
                       fill="none"
-                      stroke="#163b59"
-                      strokeWidth="9"
+                      stroke={
+                        selected?.kind === "wall" &&
+                        selected.strokeIndex === strokeIndex
+                          ? "#f59e0b"
+                          : "#163b59"
+                      }
+                      strokeWidth="18"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      pointerEvents="none"
+                      pointerEvents="stroke"
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        if (confirmed) return;
+                        setSelected({ kind: "wall", strokeIndex });
+                      }}
                     />
                   </g>
                 );
@@ -2756,6 +3039,26 @@ function InteractiveFloorPlan({
                   )}
                 </g>
               )}
+              {sequenceStart && mode === "wall" && measurementPreview && (
+                <g pointerEvents="none">
+                  <line
+                    x1={sequenceStart.x * 1000}
+                    y1={sequenceStart.y * 600}
+                    x2={measurementPreview.x * 1000}
+                    y2={measurementPreview.y * 600}
+                    stroke="#f59e0b"
+                    strokeWidth="18"
+                    strokeLinecap="round"
+                    opacity="0.7"
+                  />
+                  <circle
+                    cx={sequenceStart.x * 1000}
+                    cy={sequenceStart.y * 600}
+                    r="11"
+                    fill="#0876db"
+                  />
+                </g>
+              )}
               {!confirmed &&
                 (mode === "wall" || mode === "curve" || mode === "point") &&
                 strokes.flatMap((stroke, strokeIndex) => {
@@ -2820,19 +3123,32 @@ function InteractiveFloorPlan({
                   )}
                   {el.type === "column" && (
                     <g>
+                      {el.shape === "circle" ? (
+                        <circle
+                          r={Math.max(24, (el.width || 300) / 6)}
+                          fill="#dce6ee"
+                          stroke={
+                            selected?.kind === "element" && selected.id === el.id
+                              ? "#f59e0b"
+                              : "#163b59"
+                          }
+                          strokeWidth="5"
+                        />
+                      ) : (
                       <rect
                         x={-Math.max(24, (el.width || 300) / 12)}
                         y={-Math.max(24, (el.height || 300) / 12)}
                         width={Math.max(48, (el.width || 300) / 6)}
                         height={Math.max(48, (el.height || 300) / 6)}
-                        fill="#dce6ee"
-                        stroke={
-                          selected?.kind === "element" && selected.id === el.id
-                            ? "#f59e0b"
-                            : "#163b59"
-                        }
-                        strokeWidth="5"
-                      />
+                          fill="#dce6ee"
+                          stroke={
+                            selected?.kind === "element" && selected.id === el.id
+                              ? "#f59e0b"
+                              : "#163b59"
+                          }
+                          strokeWidth="5"
+                        />
+                      )}
                       <text y="5" textAnchor="middle" fontWeight="700">
                         {el.width} × {el.height}
                       </text>
@@ -2840,7 +3156,9 @@ function InteractiveFloorPlan({
                   )}
                   {el.type === "door" && (
                     <g transform={`rotate(${el.direction || 0})`}>
-                      <g transform={el.flipped ? "scale(1 -1)" : undefined}>
+                      <g
+                        transform={`scale(${el.flipHorizontal ? -1 : 1} ${el.flipVertical || el.flipped ? -1 : 1})`}
+                      >
                         <circle r="5" fill="#0876db" />
                         <line
                           x1="0"
@@ -2889,7 +3207,7 @@ function InteractiveFloorPlan({
             </svg>
             {!strokes.length && (
               <div className="emptycanvas">
-                <p>Toque ou clique para iniciar o contorno da parede livre.</p>
+                <p>Toque ou clique no primeiro ponto e continue parede por parede.</p>
               </div>
             )}
           </div>
@@ -2901,9 +3219,9 @@ function InteractiveFloorPlan({
               [
                 "wall",
                 "point",
-                "curve",
                 "door",
-                "window",
+                "window-bathroom",
+                "window-standard",
                 "column",
                 "camera",
                 "measure",
@@ -2915,6 +3233,7 @@ function InteractiveFloorPlan({
                 className={`btn ${mode === x ? "primary" : ""}`}
                 onClick={() => {
                   setMode(x);
+                  if (x !== "wall") setSequenceStart(null);
                   setMeasurementStart(null);
                   setMeasurementPreview(null);
                 }}
@@ -2923,8 +3242,10 @@ function InteractiveFloorPlan({
                   ? "Desenhar paredes"
                   : x === "point"
                     ? "Adicionar ponto"
-                    : x === "curve"
-                      ? "Curva suave"
+                    : x === "window-bathroom"
+                        ? "Janela banheiro 40 cm"
+                        : x === "window-standard"
+                          ? "Janela padrão 110 cm"
                       : x === "column"
                         ? "Coluna"
                       : x === "measure"
@@ -2977,21 +3298,38 @@ function InteractiveFloorPlan({
                   Girar 90°
                 </button>
                 {selectedElement.type === "door" && (
-                  <button
-                    className="btn"
-                    disabled={confirmed}
-                    onClick={() =>
-                      setElements((items) =>
-                        items.map((item) =>
-                          item.id === selectedElement.id
-                            ? { ...item, flipped: !item.flipped }
-                            : item,
-                        ),
-                      )
-                    }
-                  >
-                    Inverter lado da abertura
-                  </button>
+                  <>
+                    <button
+                      className="btn"
+                      disabled={confirmed}
+                      onClick={() =>
+                        setElements((items) =>
+                          items.map((item) =>
+                            item.id === selectedElement.id
+                              ? { ...item, flipHorizontal: !item.flipHorizontal }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      Inverter horizontalmente
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={confirmed}
+                      onClick={() =>
+                        setElements((items) =>
+                          items.map((item) =>
+                            item.id === selectedElement.id
+                              ? { ...item, flipVertical: !item.flipVertical }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      Inverter verticalmente
+                    </button>
+                  </>
                 )}
                 <small>
                   Toque na porta ou janela para mostrar estes controles.
@@ -3029,6 +3367,48 @@ function InteractiveFloorPlan({
               posição.
             </p>
           )}
+          <button
+            className="btn"
+            disabled={!sequenceStart || confirmed}
+            onClick={() => {
+              setSequenceStart(null);
+              setMeasurementPreview(null);
+            }}
+          >
+            Encerrar sequência de paredes
+          </button>
+          <button
+            className="btn"
+            disabled={selected?.kind !== "wall" || confirmed}
+            onClick={() => {
+              if (selected?.kind !== "wall") return;
+              const index = selected.strokeIndex;
+              setStrokes((items) =>
+                items.map((stroke, strokeIndex) => {
+                  if (strokeIndex !== index || stroke.length < 2) return stroke;
+                  const start = stroke[0], end = stroke[stroke.length - 1];
+                  return stroke.length > 2
+                    ? stroke
+                    : [
+                        start,
+                        {
+                          x: (start.x + end.x) / 2,
+                          y: (start.y + end.y) / 2,
+                        },
+                        end,
+                      ];
+                }),
+              );
+              setStrokeKinds((items) =>
+                items.map((kind, strokeIndex) =>
+                  strokeIndex === index ? "curve" : kind,
+                ),
+              );
+              setMode("point");
+            }}
+          >
+            Curvar parede selecionada
+          </button>
           <button
             className="btn"
             disabled={!strokes.length || confirmed}
@@ -3099,13 +3479,13 @@ function InteractiveFloorPlan({
                   setElements((items) =>
                     items.map((item) =>
                       item.id === selected.id
-                        ? { ...item, flipped: !item.flipped }
+                        ? { ...item, flipVertical: !item.flipVertical }
                         : item,
                     ),
                   )
                 }
               >
-                Inverter abertura da porta
+                Inverter verticalmente
               </button>
             )}
           {selected?.kind === "measurement" && (
@@ -3179,10 +3559,27 @@ function InteractiveFloorPlan({
           {selectedElement?.type === "column" && (
             <div className="field">
               <span>Medidas da coluna ({floorPlanProject?.unit || "mm"})</span>
+              <button
+                type="button"
+                className={`btn ${selectedElement.locked ? "primary" : ""}`}
+                onClick={() =>
+                  setElements((items) =>
+                    items.map((item) =>
+                      item.id === selectedElement.id
+                        ? { ...item, locked: !item.locked }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                <Lock size={14} />
+                {selectedElement.locked ? "Destravar coluna" : "Travar coluna"}
+              </button>
               <div className="actions">
                 <input
                   inputMode="decimal"
                   aria-label="Largura da coluna"
+                  disabled={selectedElement.locked}
                   value={selectedElement.width || ""}
                   onChange={(event) =>
                     setElements((items) =>
@@ -3197,6 +3594,7 @@ function InteractiveFloorPlan({
                 <input
                   inputMode="decimal"
                   aria-label="Comprimento da coluna"
+                  disabled={selectedElement.locked}
                   value={selectedElement.height || ""}
                   onChange={(event) =>
                     setElements((items) =>
@@ -3313,7 +3711,7 @@ function VoiceAssistant({
   openModal,
 }: {
   go: (section: Section) => void;
-  openModal: (modal: "client" | "project" | "environment") => void;
+  openModal: (modal: "client-project" | "environment") => void;
 }) {
   const [listening, setListening] = useState(false),
     [transcript, setTranscript] = useState(""),
@@ -3359,8 +3757,8 @@ function VoiceAssistant({
       ["portal", "portal"],
     ];
     const destination = destinations.find(([word]) => command.includes(word));
-    if (command.includes("novo cliente")) openModal("client");
-    else if (command.includes("novo projeto")) openModal("project");
+    if (command.includes("novo cliente")) openModal("client-project");
+    else if (command.includes("novo projeto")) openModal("client-project");
     else if (command.includes("novo ambiente")) openModal("environment");
     else if (destination) go(destination[1]);
     setTranscript("");
@@ -3649,8 +4047,7 @@ async function pdf(p?: Project, save = true): Promise<Blob> {
     environments = project
       ? await db.environments.where("projectId").equals(project.id).toArray()
       : [],
-    pageWidth = 297,
-    pageHeight = 210;
+    pageWidth = 297;
   const header = (title: string, subtitle: string) => {
     d.setFillColor(9, 44, 76);
     d.rect(0, 0, pageWidth, 23, "F");

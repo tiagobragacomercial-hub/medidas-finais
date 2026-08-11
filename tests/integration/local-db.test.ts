@@ -57,7 +57,28 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
         { x: 0.8, y: 0.7 },
       ],
     ],
-    elements: [{ id: uid(), type: "door", x: 0.5, y: 0.1 }],
+    elements: [
+      {
+        id: uid(),
+        type: "door",
+        x: 0.5,
+        y: 0.1,
+        width: 800,
+        wallIndex: 0,
+        flipHorizontal: true,
+        flipVertical: false,
+      },
+      {
+        id: uid(),
+        type: "column",
+        x: 0.4,
+        y: 0.4,
+        width: 300,
+        height: 300,
+        shape: "circle",
+        locked: true,
+      },
+    ],
     measurements: [
       {
         id: uid(),
@@ -91,6 +112,10 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
   assert.equal(plan?.strokes?.length, 2);
   assert.equal(plan?.strokes?.[0].length, 3);
   assert.equal(plan?.elements[0].type, "door");
+  assert.equal(plan?.elements[0].width, 800);
+  assert.equal(plan?.elements[0].flipHorizontal, true);
+  assert.equal(plan?.elements[1].shape, "circle");
+  assert.equal(plan?.elements[1].locked, true);
   assert.equal(plan?.measurements?.[0].value, "3200");
   assert.deepEqual(plan?.measurements?.[0].labelPoint, { x: 0.55, y: 0.24 });
   assert.equal(plan?.texts?.[0].value, "PONTO DE ÁGUA");
