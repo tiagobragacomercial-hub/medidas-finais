@@ -211,6 +211,8 @@ test("medida da foto usa dois pontos e posicionamento da cota como a planta", as
   assert.match(app, /geometry\.lineEnd/);
   assert.match(app, /startDrag\("label"\)/);
   assert.match(app, /fontSize: 12/);
+  assert.match(app, /boxShadow: "0 0 0 3px #fff"/);
+  assert.match(app, /zIndex: 10/);
 });
 
 test("traço livre é classificado e retificado ao terminar o gesto", async () => {

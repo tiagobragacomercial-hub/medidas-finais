@@ -2148,6 +2148,9 @@ function Measure({
           top: `${label.y * 100}%`,
           fontSize: 12,
           color,
+          background: "#fff",
+          zIndex: 10,
+          boxShadow: "0 0 0 3px #fff",
         }}
       >
         {a.value || "?"}
