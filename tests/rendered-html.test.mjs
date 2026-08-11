@@ -183,6 +183,12 @@ test("medida mostra prévia entre os pontos e solicita o número por último", a
   );
   assert.match(app, /Prévia da medida em criação/);
   assert.match(app, /measurementPreview/);
+  assert.match(app, /measurementEnd/);
+  assert.match(app, /Posicione a linha da cota longe da parede/);
+  assert.match(app, /labelPoint: p/);
+  assert.match(app, /dimensionX1/);
+  assert.match(app, /normalX/);
+  assert.match(app, /setDragPart\("label"\)/);
   assert.match(app, /Agora informe o número real da medida/);
   const promptPosition = app.indexOf("Agora informe o número real da medida");
   const measurementInsertPosition = app.indexOf("setMeasurements((items)", promptPosition);

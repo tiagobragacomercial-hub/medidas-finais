@@ -2184,6 +2184,10 @@ function InteractiveFloorPlan({
       x: number;
       y: number;
     } | null>(null),
+    [measurementEnd, setMeasurementEnd] = useState<{
+      x: number;
+      y: number;
+    } | null>(null),
     [measurementPreview, setMeasurementPreview] = useState<{
       x: number;
       y: number;
@@ -2459,10 +2463,14 @@ function InteractiveFloorPlan({
       if (!measurementStart) {
         setMeasurementStart(measurePoint);
         setMeasurementPreview(measurePoint);
+      } else if (!measurementEnd) {
+        setMeasurementEnd(measurePoint);
+        setMeasurementPreview(measurePoint);
       } else {
         const informed = prompt("Agora informe o número real da medida:", "");
         if (informed === null) {
           setMeasurementStart(null);
+          setMeasurementEnd(null);
           setMeasurementPreview(null);
           return;
         }
@@ -2477,7 +2485,8 @@ function InteractiveFloorPlan({
           {
             id,
             start: measurementStart,
-            end: measurePoint,
+            end: measurementEnd,
+            labelPoint: p,
             value: parsed.data,
             unit: floorPlanProject?.unit || "mm",
             color: "#d12f2f",
@@ -2487,6 +2496,7 @@ function InteractiveFloorPlan({
         setActionHistory((items) => [...items, "measurement"]);
         setSelected({ kind: "measurement", id });
         setMeasurementStart(null);
+        setMeasurementEnd(null);
         setMeasurementPreview(null);
       }
     } else if (mode === "text") {
@@ -2897,8 +2907,24 @@ function InteractiveFloorPlan({
                     x: (measurement.start.x + measurement.end.x) / 2,
                     y: (measurement.start.y + measurement.end.y) / 2,
                   },
-                  labelX = labelPoint.x * 1000,
-                  labelY = labelPoint.y * 600;
+                  rawLabelX = labelPoint.x * 1000,
+                  rawLabelY = labelPoint.y * 600,
+                  dx = x2 - x1,
+                  dy = y2 - y1,
+                  length = Math.hypot(dx, dy) || 1,
+                  normalX = -dy / length,
+                  normalY = dx / length,
+                  middleX = (x1 + x2) / 2,
+                  middleY = (y1 + y2) / 2,
+                  offset =
+                    (rawLabelX - middleX) * normalX +
+                    (rawLabelY - middleY) * normalY,
+                  dimensionX1 = x1 + normalX * offset,
+                  dimensionY1 = y1 + normalY * offset,
+                  dimensionX2 = x2 + normalX * offset,
+                  dimensionY2 = y2 + normalY * offset,
+                  labelX = (dimensionX1 + dimensionX2) / 2,
+                  labelY = (dimensionY1 + dimensionY2) / 2;
                 return (
                   <g
                     key={measurement.id}
@@ -2908,13 +2934,52 @@ function InteractiveFloorPlan({
                     <line
                       x1={x1}
                       y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke={selectedMeasurement ? "#f59e0b" : measurement.color || "#d12f2f"}
-                      strokeWidth={selectedMeasurement ? 6 : 4}
-                      strokeDasharray="12 7"
+                      x2={dimensionX1}
+                      y2={dimensionY1}
+                      stroke={measurement.color || "#d12f2f"}
+                      strokeWidth="2"
+                      opacity="0.75"
                       pointerEvents="none"
                     />
+                    <line
+                      x1={x2}
+                      y1={y2}
+                      x2={dimensionX2}
+                      y2={dimensionY2}
+                      stroke={measurement.color || "#d12f2f"}
+                      strokeWidth="2"
+                      opacity="0.75"
+                      pointerEvents="none"
+                    />
+                    <line
+                      x1={dimensionX1}
+                      y1={dimensionY1}
+                      x2={dimensionX2}
+                      y2={dimensionY2}
+                      stroke={selectedMeasurement ? "#f59e0b" : measurement.color || "#d12f2f"}
+                      strokeWidth={selectedMeasurement ? 6 : 4}
+                      pointerEvents="stroke"
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                        if (confirmed || measurement.locked) return;
+                        setSelected({ kind: "measurement", id: measurement.id });
+                        setDragPart("label");
+                        setDragging(true);
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      }}
+                    />
+                    {[{ x: dimensionX1, y: dimensionY1 }, { x: dimensionX2, y: dimensionY2 }].map((tick, index) => (
+                      <line
+                        key={`tick-${index}`}
+                        x1={tick.x - normalX * 10}
+                        y1={tick.y - normalY * 10}
+                        x2={tick.x + normalX * 10}
+                        y2={tick.y + normalY * 10}
+                        stroke={measurement.color || "#d12f2f"}
+                        strokeWidth="3"
+                        pointerEvents="none"
+                      />
+                    ))}
                     {[
                       { x: x1, y: y1, part: "start" as const },
                       { x: x2, y: y2, part: "end" as const },
@@ -2961,12 +3026,8 @@ function InteractiveFloorPlan({
                           id: measurement.id,
                         });
                         setDragPart("label");
-                        if (selectedMeasurement) {
-                          setDragging(true);
-                          event.currentTarget.setPointerCapture(
-                            event.pointerId,
-                          );
-                        }
+                        setDragging(true);
+                        event.currentTarget.setPointerCapture(event.pointerId);
                       }}
                     />
                     <text
@@ -3026,7 +3087,7 @@ function InteractiveFloorPlan({
               ))}
               {measurementStart && (
                 <g pointerEvents="none">
-                  {measurementPreview && (
+                  {measurementPreview && !measurementEnd && (
                     <line
                       x1={measurementStart.x * 1000}
                       y1={measurementStart.y * 600}
@@ -3045,6 +3106,45 @@ function InteractiveFloorPlan({
                     stroke="#fff"
                     strokeWidth="4"
                   />
+                  {measurementEnd && measurementPreview && (() => {
+                    const x1 = measurementStart.x * 1000,
+                      y1 = measurementStart.y * 600,
+                      x2 = measurementEnd.x * 1000,
+                      y2 = measurementEnd.y * 600,
+                      dx = x2 - x1,
+                      dy = y2 - y1,
+                      length = Math.hypot(dx, dy) || 1,
+                      normalX = -dy / length,
+                      normalY = dx / length,
+                      middleX = (x1 + x2) / 2,
+                      middleY = (y1 + y2) / 2,
+                      previewX = measurementPreview.x * 1000,
+                      previewY = measurementPreview.y * 600,
+                      offset =
+                        (previewX - middleX) * normalX +
+                        (previewY - middleY) * normalY,
+                      dimensionX1 = x1 + normalX * offset,
+                      dimensionY1 = y1 + normalY * offset,
+                      dimensionX2 = x2 + normalX * offset,
+                      dimensionY2 = y2 + normalY * offset;
+                    return (
+                      <>
+                        <line x1={x1} y1={y1} x2={dimensionX1} y2={dimensionY1} stroke="#f59e0b" strokeWidth="2" />
+                        <line x1={x2} y1={y2} x2={dimensionX2} y2={dimensionY2} stroke="#f59e0b" strokeWidth="2" />
+                        <line x1={dimensionX1} y1={dimensionY1} x2={dimensionX2} y2={dimensionY2} stroke="#f59e0b" strokeWidth="5" />
+                      </>
+                    );
+                  })()}
+                  {measurementEnd && (
+                    <circle
+                      cx={measurementEnd.x * 1000}
+                      cy={measurementEnd.y * 600}
+                      r="12"
+                      fill="#0876db"
+                      stroke="#fff"
+                      strokeWidth="4"
+                    />
+                  )}
                   {measurementPreview && (
                     <circle
                       cx={measurementPreview.x * 1000}
@@ -3287,6 +3387,7 @@ function InteractiveFloorPlan({
                     setSequenceOrigin(null);
                   }
                   setMeasurementStart(null);
+                  setMeasurementEnd(null);
                   setMeasurementPreview(null);
                 }}
               >
@@ -3457,9 +3558,11 @@ function InteractiveFloorPlan({
           )}
           {mode === "measure" && (
             <p className="subtitle">
-              {measurementStart
-                ? "Marque o segundo ponto da cota."
-                : "Marque dois pontos e depois digite a medida real."}
+              {!measurementStart
+                ? "Marque o primeiro ponto de referência."
+                : !measurementEnd
+                  ? "Marque o segundo ponto de referência."
+                  : "Posicione a linha da cota longe da parede e confirme."}
             </p>
           )}
           {mode === "text" && (
@@ -3780,6 +3883,7 @@ function InteractiveFloorPlan({
               setMeasurements([]);
               setTexts([]);
               setMeasurementStart(null);
+              setMeasurementEnd(null);
               setMeasurementPreview(null);
               setConfirmed(false);
             }}
