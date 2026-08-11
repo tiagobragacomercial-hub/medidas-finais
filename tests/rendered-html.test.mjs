@@ -110,7 +110,13 @@ test("planta aceita paredes sequenciais e componentes de porta e janela", async 
   assert.match(app, /sequenceStart/);
   assert.match(app, /mode === "curve"/);
   assert.match(app, /Adicionar ponto/);
-  assert.match(app, /A 48 48/);
+  assert.match(app, /sequenceOrigin/);
+  assert.match(app, /closesEnvironment/);
+  assert.match(app, /Tipo da próxima porta/);
+  assert.match(app, /Pivotante/);
+  assert.match(app, /Embutida/);
+  assert.match(app, /Sanfonada/);
+  assert.match(app, /doorType === "sliding"/);
   assert.match(app, /el\.type === "window"/);
   assert.match(app, /floor-grid-large/);
   assert.match(app, /Inverter horizontalmente/);

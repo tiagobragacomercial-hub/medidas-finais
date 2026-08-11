@@ -65,6 +65,7 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
         y: 0.1,
         width: 800,
         wallIndex: 0,
+        doorType: "sliding",
         flipHorizontal: true,
         flipVertical: false,
       },
@@ -113,6 +114,7 @@ test("planta vetorial permanece vinculada ao ambiente após reabrir", async () =
   assert.equal(plan?.strokes?.[0].length, 3);
   assert.equal(plan?.elements[0].type, "door");
   assert.equal(plan?.elements[0].width, 800);
+  assert.equal(plan?.elements[0].doorType, "sliding");
   assert.equal(plan?.elements[0].flipHorizontal, true);
   assert.equal(plan?.elements[1].shape, "circle");
   assert.equal(plan?.elements[1].locked, true);

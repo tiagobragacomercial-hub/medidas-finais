@@ -2192,6 +2192,13 @@ function InteractiveFloorPlan({
       x: number;
       y: number;
     } | null>(null),
+    [sequenceOrigin, setSequenceOrigin] = useState<{
+      x: number;
+      y: number;
+    } | null>(null),
+    [doorType, setDoorType] = useState<
+      NonNullable<FloorPlanElement["doorType"]>
+    >("swing"),
     [confirmed, setConfirmed] = useState(false),
     [hydratedEnvironment, setHydratedEnvironment] = useState(""),
     [selected, setSelected] = useState<
@@ -2368,13 +2375,21 @@ function InteractiveFloorPlan({
     if (mode === "wall") {
       if (!sequenceStart) {
         setSequenceStart(p);
+        setSequenceOrigin(p);
         setMeasurementPreview(p);
         return;
       }
-      setStrokes((items) => [...items, [sequenceStart, p]]);
+      const closesEnvironment = Boolean(
+          sequenceOrigin &&
+            strokes.length >= 2 &&
+            Math.hypot(p.x - sequenceOrigin.x, p.y - sequenceOrigin.y) < 0.055,
+        ),
+        endPoint = closesEnvironment && sequenceOrigin ? sequenceOrigin : p;
+      setStrokes((items) => [...items, [sequenceStart, endPoint]]);
       setStrokeKinds((items) => [...items, "polyline"]);
-      setSequenceStart(p);
-      setMeasurementPreview(p);
+      setSequenceStart(closesEnvironment ? null : endPoint);
+      setSequenceOrigin(closesEnvironment ? null : sequenceOrigin);
+      setMeasurementPreview(closesEnvironment ? null : endPoint);
       setActionHistory((items) => [...items, "wall"]);
     } else if (mode === "curve") {
       setStrokes((items) => [...items, [p]]);
@@ -2563,6 +2578,7 @@ function InteractiveFloorPlan({
               : "standard",
           flipHorizontal: false,
           flipVertical: false,
+          doorType: isDoor ? doorType : undefined,
         },
       ]);
       setSelected({ kind: "element", id });
@@ -2752,6 +2768,7 @@ function InteractiveFloorPlan({
       setStrokes((items) => {
         const next = items.slice(0, -1);
         setSequenceStart(next.at(-1)?.at(-1) || null);
+        setSequenceOrigin(next[0]?.[0] || null);
         return next;
       });
     }
@@ -2772,6 +2789,7 @@ function InteractiveFloorPlan({
     setActionHistory([]);
     setSelected(null);
     setSequenceStart(null);
+    setSequenceOrigin(null);
   }
   const wallSegments = strokes.flatMap((stroke, strokeIndex) =>
     strokeKinds[strokeIndex] === "curve"
@@ -3057,6 +3075,16 @@ function InteractiveFloorPlan({
                     r="11"
                     fill="#0876db"
                   />
+                  {sequenceOrigin && strokes.length >= 2 && (
+                    <circle
+                      cx={sequenceOrigin.x * 1000}
+                      cy={sequenceOrigin.y * 600}
+                      r="18"
+                      fill="none"
+                      stroke="#16a34a"
+                      strokeWidth="6"
+                    />
+                  )}
                 </g>
               )}
               {!confirmed &&
@@ -3159,26 +3187,47 @@ function InteractiveFloorPlan({
                       <g
                         transform={`scale(${el.flipHorizontal ? -1 : 1} ${el.flipVertical || el.flipped ? -1 : 1})`}
                       >
-                        <circle r="5" fill="#0876db" />
-                        <line
-                          x1="0"
-                          y1="0"
-                          x2="48"
-                          y2="0"
-                          stroke="#163b59"
-                          strokeWidth="6"
-                        />
-                        <path
-                          d="M 0 48 A 48 48 0 0 0 48 0"
-                          fill="none"
-                          stroke="#0876db"
-                          strokeWidth="3"
-                        />
+                        <rect x="-44" y="-15" width="88" height="30" fill="#fff" />
+                        <rect x="-44" y="-12" width="8" height="24" fill="#aeb8c0" />
+                        <rect x="36" y="-12" width="8" height="24" fill="#aeb8c0" />
+                        {(el.doorType || "swing") === "swing" && (
+                          <>
+                            <line x1="-36" y1="0" x2="-36" y2="-72" stroke="#163b59" strokeWidth="6" />
+                            <path d="M -36 -72 A 72 72 0 0 1 36 0" fill="none" stroke="#5f7180" strokeWidth="3" strokeDasharray="7 5" />
+                          </>
+                        )}
+                        {el.doorType === "pivot" && (
+                          <>
+                            <line x1="-18" y1="0" x2="-18" y2="-72" stroke="#163b59" strokeWidth="6" />
+                            <circle cx="-18" cy="0" r="5" fill="#0876db" />
+                            <path d="M -18 -72 A 72 72 0 0 1 36 0" fill="none" stroke="#5f7180" strokeWidth="3" strokeDasharray="7 5" />
+                          </>
+                        )}
+                        {el.doorType === "pocket" && (
+                          <>
+                            <line x1="-36" y1="0" x2="36" y2="0" stroke="#163b59" strokeWidth="5" />
+                            <path d="M -25 -9 L -36 0 L -25 9" fill="none" stroke="#0876db" strokeWidth="3" />
+                          </>
+                        )}
+                        {el.doorType === "sliding" && (
+                          <>
+                            <line x1="-34" y1="-5" x2="10" y2="-5" stroke="#163b59" strokeWidth="5" />
+                            <line x1="-10" y1="5" x2="34" y2="5" stroke="#163b59" strokeWidth="5" />
+                            <path d="M -22 -14 L -34 -5 L -22 4 M 22 -4 L 34 5 L 22 14" fill="none" stroke="#0876db" strokeWidth="3" />
+                          </>
+                        )}
+                        {el.doorType === "folding" && (
+                          <path d="M -36 0 L 0 -42 L 36 0" fill="white" stroke="#163b59" strokeWidth="6" strokeLinejoin="round" />
+                        )}
+                        {el.doorType === "accordion" && (
+                          <path d="M -36 0 L -24 -16 L -12 0 L 0 -16 L 12 0 L 24 -16 L 36 0" fill="none" stroke="#163b59" strokeWidth="5" strokeLinejoin="round" />
+                        )}
                       </g>
                     </g>
                   )}
                   {el.type === "window" && (
                     <g transform={`rotate(${el.direction || 0})`}>
+                      <rect x="-40" y="-15" width="80" height="30" fill="#fff" />
                       <rect
                         x="-34"
                         y="-10"
@@ -3199,7 +3248,7 @@ function InteractiveFloorPlan({
                     </g>
                   )}
                   <text x="25" y="6" style={{ pointerEvents: "none" }}>
-                    {el.type}
+                    {el.type === "camera" ? "Foto" : ""}
                     {el.type === "camera" && el.photoId ? " • foto" : ""}
                   </text>
                 </g>
@@ -3233,7 +3282,10 @@ function InteractiveFloorPlan({
                 className={`btn ${mode === x ? "primary" : ""}`}
                 onClick={() => {
                   setMode(x);
-                  if (x !== "wall") setSequenceStart(null);
+                  if (x !== "wall") {
+                    setSequenceStart(null);
+                    setSequenceOrigin(null);
+                  }
                   setMeasurementStart(null);
                   setMeasurementPreview(null);
                 }}
@@ -3256,6 +3308,28 @@ function InteractiveFloorPlan({
               </button>
             ))}
           </div>
+          {mode === "door" && (
+            <label className="field">
+              <span>Tipo da próxima porta</span>
+              <select
+                value={doorType}
+                onChange={(event) =>
+                  setDoorType(
+                    event.target.value as NonNullable<
+                      FloorPlanElement["doorType"]
+                    >,
+                  )
+                }
+              >
+                <option value="swing">Abrir</option>
+                <option value="pivot">Pivotante</option>
+                <option value="pocket">Embutida</option>
+                <option value="sliding">Correr</option>
+                <option value="folding">Articulada</option>
+                <option value="accordion">Sanfonada</option>
+              </select>
+            </label>
+          )}
           <div className="actions floorplan-actions">
             <button className="btn" disabled={!actionHistory.length || confirmed} onClick={undoLast}>
               Voltar/Desfazer
@@ -3279,6 +3353,33 @@ function InteractiveFloorPlan({
                     ? "Porta selecionada"
                     : "Janela selecionada"}
                 </strong>
+                {selectedElement.type === "door" && (
+                  <select
+                    aria-label="Tipo da porta selecionada"
+                    value={selectedElement.doorType || "swing"}
+                    onChange={(event) =>
+                      setElements((items) =>
+                        items.map((item) =>
+                          item.id === selectedElement.id
+                            ? {
+                                ...item,
+                                doorType: event.target.value as NonNullable<
+                                  FloorPlanElement["doorType"]
+                                >,
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="swing">Abrir</option>
+                    <option value="pivot">Pivotante</option>
+                    <option value="pocket">Embutida</option>
+                    <option value="sliding">Correr</option>
+                    <option value="folding">Articulada</option>
+                    <option value="accordion">Sanfonada</option>
+                  </select>
+                )}
                 <button
                   className="btn primary"
                   disabled={confirmed}
@@ -3372,6 +3473,7 @@ function InteractiveFloorPlan({
             disabled={!sequenceStart || confirmed}
             onClick={() => {
               setSequenceStart(null);
+              setSequenceOrigin(null);
               setMeasurementPreview(null);
             }}
           >

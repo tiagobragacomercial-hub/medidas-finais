@@ -123,6 +123,13 @@ export interface FloorPlanElement {
   flipVertical?: boolean;
   shape?: "rectangle" | "square" | "circle";
   variant?: "bathroom" | "standard";
+  doorType?:
+    | "swing"
+    | "pivot"
+    | "pocket"
+    | "sliding"
+    | "folding"
+    | "accordion";
   locked?: boolean;
   wallIndex?: number;
   photoId?: string;
