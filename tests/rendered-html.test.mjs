@@ -95,6 +95,7 @@ test("editor de medidas remove a ferramenta em L e oferece desfazer", async () =
   ]);
   assert.doesNotMatch(app, /\["linear", "↔ Medida"\]/);
   assert.doesNotMatch(app, /Informe a segunda medida/);
+  assert.doesNotMatch(app, /Descrição da medida \(opcional\)/);
   assert.doesNotMatch(catalog, /l-shape/);
   assert.match(app, /Desfazer última ação/);
 });

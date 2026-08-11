@@ -1308,7 +1308,6 @@ function Editor({
         return setDraftPoints([]);
       }
       value = parsed.data;
-      description = prompt("Descrição da medida (opcional):", "")?.trim() || "";
     }
     const finalPoints =
       config.type === "linear"
