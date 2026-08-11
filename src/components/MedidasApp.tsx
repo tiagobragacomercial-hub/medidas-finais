@@ -1120,8 +1120,8 @@ function Editor({
     [wallIndex, setWallIndex] = useState(0),
     [uploadAsDetail, setUploadAsDetail] = useState(false),
     [measureColor, setMeasureColor] = useState("#ef3340"),
-    [measureStrokeWidth, setMeasureStrokeWidth] = useState(3),
-    [measureFontSize, setMeasureFontSize] = useState(16);
+    [measureStrokeWidth, setMeasureStrokeWidth] = useState(2),
+    [measureFontSize, setMeasureFontSize] = useState(12);
   const currentPlan = useLiveQuery<FloorPlanRecord | undefined>(
     () =>
       environmentId
@@ -1269,10 +1269,15 @@ function Editor({
     const r = canvas.current!.getBoundingClientRect(),
       p = normalizePointer(e.clientX, e.clientY, r);
     const points = [...draftPoints, p],
-      config = toolConfig[tool];
-    if (points.length < config.points) {
+      config = toolConfig[tool],
+      requiredPoints = config.type === "linear" ? 3 : config.points;
+    if (points.length < requiredPoints) {
       setDraftPoints(points);
-      notify(`Ponto ${points.length} registrado`);
+      notify(
+        config.type === "linear" && points.length === 2
+          ? "Agora posicione a linha da medida"
+          : `Ponto ${points.length} registrado`,
+      );
       return;
     }
     let value = "",
@@ -1316,7 +1321,9 @@ function Editor({
       }
     }
     const finalPoints =
-      tool === "l"
+      config.type === "linear"
+        ? points.slice(0, 2)
+        : tool === "l"
         ? [points[0], { x: points[1].x, y: points[0].y }, points[1]]
         : points;
     const id = uid();
@@ -1327,6 +1334,7 @@ function Editor({
       code: nextCode(tool, anns),
       state: "protected",
       points: finalPoints,
+      labelPoint: config.type === "linear" ? points[2] : undefined,
       value,
       secondaryValue,
       textPosition: "above",
@@ -1641,15 +1649,30 @@ function Editor({
                     }}
                     preserveAspectRatio="none"
                   >
-                    <line
-                      x1={draftPoints[0].x * 1000}
-                      y1={draftPoints[0].y * 1000}
-                      x2={draftPointer.x * 1000}
-                      y2={draftPointer.y * 1000}
-                      stroke="#f59e0b"
-                      strokeWidth="5"
-                      strokeDasharray="14 9"
-                    />
+                    {draftPoints.length === 1 ? (
+                      <line
+                        x1={draftPoints[0].x * 1000}
+                        y1={draftPoints[0].y * 1000}
+                        x2={draftPointer.x * 1000}
+                        y2={draftPointer.y * 1000}
+                        stroke="#f59e0b"
+                        strokeWidth="2"
+                        strokeDasharray="14 9"
+                      />
+                    ) : (() => {
+                      const geometry = photoDimensionGeometry(
+                        draftPoints[0],
+                        draftPoints[1],
+                        draftPointer,
+                      );
+                      return (
+                        <>
+                          <line x1={geometry.start.x * 1000} y1={geometry.start.y * 1000} x2={geometry.lineStart.x * 1000} y2={geometry.lineStart.y * 1000} stroke="#f59e0b" strokeWidth="1.5" />
+                          <line x1={geometry.end.x * 1000} y1={geometry.end.y * 1000} x2={geometry.lineEnd.x * 1000} y2={geometry.lineEnd.y * 1000} stroke="#f59e0b" strokeWidth="1.5" />
+                          <line x1={geometry.lineStart.x * 1000} y1={geometry.lineStart.y * 1000} x2={geometry.lineEnd.x * 1000} y2={geometry.lineEnd.y * 1000} stroke="#f59e0b" strokeWidth="2" />
+                        </>
+                      );
+                    })()}
                     <circle
                       cx={draftPoints[0].x * 1000}
                       cy={draftPoints[0].y * 1000}
@@ -1662,6 +1685,14 @@ function Editor({
                       r="11"
                       fill="#f59e0b"
                     />
+                    {draftPoints[1] && (
+                      <circle
+                        cx={draftPoints[1].x * 1000}
+                        cy={draftPoints[1].y * 1000}
+                        r="11"
+                        fill="#0876db"
+                      />
+                    )}
                   </svg>
                 )}
                 {anns
@@ -1921,6 +1952,46 @@ function Editor({
   );
 }
 
+function photoDimensionGeometry(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  label: { x: number; y: number },
+) {
+  const dx = end.x - start.x,
+    dy = end.y - start.y,
+    length = Math.hypot(dx, dy) || 1,
+    normalX = -dy / length,
+    normalY = dx / length,
+    middle = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
+    offset = (label.x - middle.x) * normalX + (label.y - middle.y) * normalY;
+  return {
+    start,
+    end,
+    lineStart: { x: start.x + normalX * offset, y: start.y + normalY * offset },
+    lineEnd: { x: end.x + normalX * offset, y: end.y + normalY * offset },
+  };
+}
+
+function photoLineStyle(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  color: string,
+  width: number,
+): React.CSSProperties {
+  const dx = (end.x - start.x) * 100,
+    dy = (end.y - start.y) * 100;
+  return {
+    position: "absolute",
+    left: `${start.x * 100}%`,
+    top: `${start.y * 100}%`,
+    width: `${Math.hypot(dx, dy)}%`,
+    height: width,
+    background: color,
+    transform: `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`,
+    transformOrigin: "left center",
+  };
+}
+
 function EnvironmentVideo({ media }: { media: Photo }) {
   const url = useMemo(() => URL.createObjectURL(media.blob), [media.blob]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
@@ -2022,31 +2093,46 @@ function Measure({
   }
   if (a.points.length < 2) return null;
   const [p1, p2] = a.points,
-    dx = (p2.x - p1.x) * 100,
-    dy = (p2.y - p1.y) * 100,
-    len = Math.hypot(dx, dy),
-    ang = (Math.atan2(dy, dx) * 180) / Math.PI,
     label = a.labelPoint || {
       x: (p1.x + p2.x) / 2,
       y: (p1.y + p2.y) / 2,
-    };
+    },
+    geometry = photoDimensionGeometry(p1, p2, label),
+    color = a.color || "#ef3340",
+    lineWidth = Math.min(2, a.strokeWidth || 2);
   return (
     <>
       <div
-        className="measure"
+        aria-hidden="true"
         style={{
-          left: `${p1.x * 100}%`,
-          top: `${p1.y * 100}%`,
-          width: `${len}%`,
-          transform: `rotate(${ang}deg)`,
-          height: selected ? Math.max(5, a.strokeWidth || 3) : a.strokeWidth || 3,
-          background: a.color || "#ef3340",
+          ...photoLineStyle(geometry.start, geometry.lineStart, color, 1.5),
+          pointerEvents: "none",
+          zIndex: 4,
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          ...photoLineStyle(geometry.end, geometry.lineEnd, color, 1.5),
+          pointerEvents: "none",
+          zIndex: 4,
+        }}
+      />
+      <div
+        className="measure"
+        data-annotation-control={selected || undefined}
+        style={{
+          ...photoLineStyle(geometry.lineStart, geometry.lineEnd, color, lineWidth),
           pointerEvents: "auto",
-          cursor: "pointer",
+          cursor: selected && showHandles ? "move" : "pointer",
+          zIndex: 5,
         }}
         onPointerDown={(event) => {
           event.stopPropagation();
-          if (event.pointerType === "mouse") click();
+          if (selected && showHandles) {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            startDrag("label");
+          } else if (event.pointerType === "mouse") click();
           else {
             selectionTimer.current = window.setTimeout(click, 2000);
           }
@@ -2074,8 +2160,8 @@ function Measure({
         style={{
           left: `${label.x * 100}%`,
           top: `${label.y * 100}%`,
-          fontSize: a.fontSize || 16,
-          color: a.color || "#ef3340",
+          fontSize: 12,
+          color,
         }}
       >
         {a.value || "?"}

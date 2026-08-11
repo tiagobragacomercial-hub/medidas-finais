@@ -12,8 +12,8 @@ export async function exportAnnotatedPng(
   ctx.drawImage(bitmap, 0, 0);
   ctx.strokeStyle = "#e21f2f";
   ctx.fillStyle = "#9d101d";
-  ctx.lineWidth = Math.max(3, bitmap.width / 500);
-  ctx.font = `700 ${Math.max(18, bitmap.width / 42)}px Arial`;
+  ctx.lineWidth = Math.max(1.5, bitmap.width / 1000);
+  ctx.font = `700 ${Math.max(12, bitmap.width / 100)}px Arial`;
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   for (const a of annotations.filter((x) => x.state !== "hidden")) {
@@ -30,37 +30,44 @@ export async function exportAnnotatedPng(
       y1 = p1.y * bitmap.height,
       x2 = p2.x * bitmap.width,
       y2 = p2.y * bitmap.height;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    const tick = Math.max(8, bitmap.width / 100);
-    for (const [x, y] of [
-      [x1, y1],
-      [x2, y2],
-    ]) {
-      ctx.beginPath();
-      ctx.moveTo(x, y - tick);
-      ctx.lineTo(x, y + tick);
-      ctx.stroke();
-    }
     const labelPoint = a.labelPoint || {
         x: (p1.x + p2.x) / 2,
         y: (p1.y + p2.y) / 2,
       },
       mx = labelPoint.x * bitmap.width,
       my = labelPoint.y * bitmap.height,
-      offset = 0;
+      dx = x2 - x1,
+      dy = y2 - y1,
+      length = Math.hypot(dx, dy) || 1,
+      normalX = -dy / length,
+      normalY = dx / length,
+      offset = (mx - (x1 + x2) / 2) * normalX + (my - (y1 + y2) / 2) * normalY,
+      lineX1 = x1 + normalX * offset,
+      lineY1 = y1 + normalY * offset,
+      lineX2 = x2 + normalX * offset,
+      lineY2 = y2 + normalY * offset,
+      textOffset = 0;
+    ctx.strokeStyle = a.color || "#e21f2f";
+    for (const [startX, startY, endX, endY] of [
+      [x1, y1, lineX1, lineY1],
+      [x2, y2, lineX2, lineY2],
+      [lineX1, lineY1, lineX2, lineY2],
+    ]) {
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+    }
     ctx.fillStyle = "#fff";
     const metrics = ctx.measureText(a.value || "?");
     ctx.fillRect(
       mx - metrics.width / 2 - 8,
-      my - offset - ctx.measureText("M").actualBoundingBoxAscent - 5,
+      my - textOffset - ctx.measureText("M").actualBoundingBoxAscent - 5,
       metrics.width + 16,
       ctx.measureText("M").actualBoundingBoxAscent + 10,
     );
-    ctx.fillStyle = "#9d101d";
-    ctx.fillText(a.value || "?", mx, my - offset);
+    ctx.fillStyle = a.color || "#9d101d";
+    ctx.fillText(a.value || "?", mx, my - textOffset);
   }
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(

@@ -34,7 +34,7 @@ test("coordenadas de marcações são proporcionais", async () => {
   ]);
   assert.match(geometry, /clientX\s*-\s*rect\.left/);
   assert.match(geometry, /point\.x\s*\*\s*width/);
-  assert.match(app, /p1\.x\s*\*\s*100/);
+  assert.match(app, /start\.x\s*\*\s*100/);
 });
 
 test("exportação usa a foto original e omite elementos ocultos", async () => {
@@ -193,6 +193,21 @@ test("medida mostra prévia entre os pontos e solicita o número por último", a
   const promptPosition = app.indexOf("Agora informe o número real da medida");
   const measurementInsertPosition = app.indexOf("setMeasurements((items)", promptPosition);
   assert.ok(promptPosition >= 0 && measurementInsertPosition > promptPosition);
+});
+
+test("medida da foto usa dois pontos e posicionamento da cota como a planta", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /requiredPoints = config\.type === "linear" \? 3/);
+  assert.match(app, /Agora posicione a linha da medida/);
+  assert.match(app, /labelPoint: config\.type === "linear" \? points\[2\]/);
+  assert.match(app, /function photoDimensionGeometry/);
+  assert.match(app, /geometry\.lineStart/);
+  assert.match(app, /geometry\.lineEnd/);
+  assert.match(app, /startDrag\("label"\)/);
+  assert.match(app, /fontSize: 12/);
 });
 
 test("traço livre é classificado e retificado ao terminar o gesto", async () => {
