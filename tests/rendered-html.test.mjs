@@ -223,13 +223,12 @@ test("foto oferece somente os símbolos técnicos da referência com legenda lat
     readFile(new URL("../src/features/photos/export-png.ts", import.meta.url), "utf8"),
   ]);
   for (const label of [
-    "Tomada baixa", "Tomada média", "Tomada alta", "Tomada de piso",
-    "Tomada de teto", "Interruptor simples", "Interruptor duplo",
-    "Interruptor triplo", "Telefone / TV a cabo", "Interfone", "Campainha",
+    "Tomada", "Tomada de piso", "Tomada de teto", "Interruptor simples",
+    "Telefone / TV a cabo", "Interfone", "Campainha",
     "Arandela", "Quadro geral de luz", "Água fria", "Água quente",
     "Saída de esgoto parede", "Ponto de gás",
   ]) assert.match(catalog, new RegExp(label));
-  assert.doesNotMatch(catalog, /Ventilação|Ar-condicionado|Equipamento|Outro/);
+  assert.doesNotMatch(catalog, /Tomada baixa|Tomada média|Tomada alta|Interruptor duplo|Interruptor triplo|Ventilação|Ar-condicionado|Equipamento|Outro/);
   assert.match(app, /function TechnicalSymbolIcon/);
   assert.match(app, /aria-label="Símbolo técnico"/);
   assert.match(app, /a\.type === "technical"/);
@@ -240,6 +239,8 @@ test("foto oferece somente os símbolos técnicos da referência com legenda lat
   assert.match(exporter, /a\.type === "technical"/);
   assert.match(catalog, /technicalSymbolColor/);
   assert.match(catalog, /color: "#0284c7"/);
+  assert.match(catalog, /color: "#dc2626"/);
+  assert.match(catalog, /color: "#92400e"/);
 });
 
 test("traço livre é classificado e retificado ao terminar o gesto", async () => {

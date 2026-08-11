@@ -2031,6 +2031,7 @@ function TechnicalSymbolIcon({ symbol, size = 28 }: { symbol?: string; size?: nu
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
       {symbol === "outlet-low" && <path d="M7 5 25 16 7 27Z" fill="white" stroke={red} strokeWidth="2" />}
+      {symbol === "outlet" && <path d="M7 5 25 16 7 27Z" fill="white" stroke={red} strokeWidth="2" />}
       {symbol === "outlet-medium" && <><path d="M7 5 25 16 7 27Z" fill="white" stroke={red} strokeWidth="2" /><path d="M7 16H25L7 27Z" fill={red} /></>}
       {symbol === "outlet-high" && <path d="M7 5 25 16 7 27Z" fill={red} />}
       {symbol === "outlet-floor" && <><rect x="6" y="5" width="20" height="22" fill="white" stroke={red} strokeWidth="2" /><path d="m7 6 18 10L7 26" fill="none" stroke={red} strokeWidth="2" /></>}

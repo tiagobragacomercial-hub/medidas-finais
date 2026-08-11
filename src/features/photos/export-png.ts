@@ -128,7 +128,7 @@ function drawTechnicalSymbol(
     ctx.lineTo(reverse ? 25 : 7, 27);
     ctx.closePath();
   };
-  if (symbol?.startsWith("outlet-") && !["outlet-floor", "outlet-ceiling"].includes(symbol)) {
+  if ((symbol === "outlet" || symbol?.startsWith("outlet-")) && !["outlet-floor", "outlet-ceiling"].includes(symbol || "")) {
     triangle();
     if (symbol === "outlet-high") { ctx.fillStyle = red; ctx.fill(); }
     else { ctx.fill(); ctx.stroke(); }
