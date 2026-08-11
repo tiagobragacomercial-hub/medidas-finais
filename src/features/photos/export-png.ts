@@ -1,4 +1,5 @@
 import type { Annotation, Photo } from "../../types/models";
+import { technicalSymbolColor } from "../annotations/catalog";
 export async function exportAnnotatedPng(
   photo: Photo,
   annotations: Annotation[],
@@ -18,13 +19,25 @@ export async function exportAnnotatedPng(
   ctx.textBaseline = "bottom";
   for (const a of annotations.filter((x) => x.state !== "hidden")) {
     if (a.type === "technical" && a.points[0]) {
-      const point = a.labelPoint || a.points[0];
+      const point = a.labelPoint || a.points[0],
+        x = point.x * bitmap.width,
+        y = point.y * bitmap.height,
+        size = Math.max(30, bitmap.width / 28);
+      ctx.save();
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = technicalSymbolColor(a.technicalSymbol);
+      ctx.lineWidth = Math.max(3, bitmap.width / 500);
+      ctx.beginPath();
+      ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
       drawTechnicalSymbol(
         ctx,
         a.technicalSymbol,
-        point.x * bitmap.width,
-        point.y * bitmap.height,
-        Math.max(24, bitmap.width / 35),
+        x,
+        y,
+        size * 0.62,
       );
       continue;
     }

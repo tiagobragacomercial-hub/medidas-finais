@@ -44,6 +44,7 @@ import { measurementValueSchema } from "../schemas/entities";
 import {
   isAnnotationTool,
   nextCode,
+  technicalSymbolColor,
   technicalSymbols,
   toolConfig,
 } from "../features/annotations/catalog";
@@ -2079,10 +2080,12 @@ function Measure({
         style={{
           left: `${(a.labelPoint?.x ?? p.x) * 100}%`,
           top: `${(a.labelPoint?.y ?? p.y) * 100}%`,
+          borderColor: technicalSymbolColor(a.technicalSymbol),
+          boxShadow: `0 0 0 2px #fff, 0 2px 7px ${technicalSymbolColor(a.technicalSymbol)}55`,
         }}
         aria-label={a.description}
       >
-        <TechnicalSymbolIcon symbol={a.technicalSymbol} />
+        <TechnicalSymbolIcon symbol={a.technicalSymbol} size={22} />
       </button>
     );
   }

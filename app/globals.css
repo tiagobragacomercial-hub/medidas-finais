@@ -584,17 +584,17 @@ button {
   z-index: 8;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 1px;
-  border: 2px solid transparent;
-  border-radius: 6px;
+  width: 38px;
+  height: 38px;
+  padding: 4px;
+  border: 3px solid;
+  border-radius: 50%;
   background: #fff;
   touch-action: none;
 }
 .technical-symbol-marker.selected {
-  border-color: #0876db;
-  box-shadow: 0 0 0 3px #ffffffcc;
+  outline: 3px solid #0876db;
+  outline-offset: 2px;
 }
 .angle-marker {
   padding: 4px 7px;

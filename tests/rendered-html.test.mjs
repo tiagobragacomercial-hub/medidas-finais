@@ -233,9 +233,13 @@ test("foto oferece somente os símbolos técnicos da referência com legenda lat
   assert.match(app, /function TechnicalSymbolIcon/);
   assert.match(app, /aria-label="Símbolo técnico"/);
   assert.match(app, /a\.type === "technical"/);
+  assert.match(app, /technicalSymbolColor\(a\.technicalSymbol\)/);
   assert.match(models, /technicalSymbol\?: string/);
   assert.match(exporter, /drawTechnicalSymbol/);
+  assert.match(exporter, /ctx\.arc\(x, y, size \/ 2/);
   assert.match(exporter, /a\.type === "technical"/);
+  assert.match(catalog, /technicalSymbolColor/);
+  assert.match(catalog, /color: "#0284c7"/);
 });
 
 test("traço livre é classificado e retificado ao terminar o gesto", async () => {

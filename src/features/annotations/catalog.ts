@@ -15,21 +15,25 @@ export function nextCode(tool: AnnotationTool, annotations: Annotation[]) {
   return `${prefix}${String(count).padStart(2, "0")}`;
 }
 export const technicalSymbols = [
-  { id: "outlet-low", label: "Tomada baixa" },
-  { id: "outlet-medium", label: "Tomada média" },
-  { id: "outlet-high", label: "Tomada alta" },
-  { id: "outlet-floor", label: "Tomada de piso" },
-  { id: "outlet-ceiling", label: "Tomada de teto" },
-  { id: "switch-single", label: "Interruptor simples" },
-  { id: "switch-double", label: "Interruptor duplo" },
-  { id: "switch-triple", label: "Interruptor triplo" },
-  { id: "phone-tv", label: "Telefone / TV a cabo" },
-  { id: "intercom", label: "Interfone" },
-  { id: "bell", label: "Campainha" },
-  { id: "sconce", label: "Arandela" },
-  { id: "light-panel", label: "Quadro geral de luz" },
-  { id: "cold-water", label: "Água fria" },
-  { id: "hot-water", label: "Água quente" },
-  { id: "sewer", label: "Saída de esgoto parede" },
-  { id: "gas", label: "Ponto de gás" },
+  { id: "outlet-low", label: "Tomada baixa", color: "#7c3aed" },
+  { id: "outlet-medium", label: "Tomada média", color: "#9333ea" },
+  { id: "outlet-high", label: "Tomada alta", color: "#c026d3" },
+  { id: "outlet-floor", label: "Tomada de piso", color: "#db2777" },
+  { id: "outlet-ceiling", label: "Tomada de teto", color: "#e11d48" },
+  { id: "switch-single", label: "Interruptor simples", color: "#ea580c" },
+  { id: "switch-double", label: "Interruptor duplo", color: "#d97706" },
+  { id: "switch-triple", label: "Interruptor triplo", color: "#ca8a04" },
+  { id: "phone-tv", label: "Telefone / TV a cabo", color: "#2563eb" },
+  { id: "intercom", label: "Interfone", color: "#0891b2" },
+  { id: "bell", label: "Campainha", color: "#0d9488" },
+  { id: "sconce", label: "Arandela", color: "#65a30d" },
+  { id: "light-panel", label: "Quadro geral de luz", color: "#16a34a" },
+  { id: "cold-water", label: "Água fria", color: "#0284c7" },
+  { id: "hot-water", label: "Água quente", color: "#dc2626" },
+  { id: "sewer", label: "Saída de esgoto parede", color: "#475569" },
+  { id: "gas", label: "Ponto de gás", color: "#16a34a" },
 ] as const;
+
+export function technicalSymbolColor(id?: string) {
+  return technicalSymbols.find((symbol) => symbol.id === id)?.color || "#6d28d9";
+}
