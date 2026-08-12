@@ -1269,23 +1269,7 @@ function Editor({
     if ((e.target as HTMLElement).closest("[data-annotation-control]")) return;
     if (!isAnnotationTool(tool) || !photo) return;
     const r = canvas.current!.getBoundingClientRect(),
-      rawPoint = normalizePointer(e.clientX, e.clientY, r),
-      technicalAnchors = anns
-        .filter((annotation) => annotation.type === "technical")
-        .map((annotation) => annotation.labelPoint || annotation.points[0])
-        .filter((point): point is { x: number; y: number } => Boolean(point)),
-      nearestTechnicalAnchor = technicalAnchors
-        .map((point) => ({
-          point,
-          distance: Math.hypot(point.x - rawPoint.x, point.y - rawPoint.y),
-        }))
-        .sort((a, b) => a.distance - b.distance)[0],
-      p =
-        tool === "linear" &&
-        draftPoints.length < 2 &&
-        nearestTechnicalAnchor?.distance < 0.065
-          ? nearestTechnicalAnchor.point
-          : rawPoint;
+      p = normalizePointer(e.clientX, e.clientY, r);
     const points = [...draftPoints, p],
       config = toolConfig[tool],
       requiredPoints = config.type === "linear" ? 3 : config.points;
@@ -2273,32 +2257,6 @@ function Measure({
           {a.description}
         </button>
       )}
-      {selected &&
-        showHandles &&
-        [p1, p2].map((point, index) => (
-          <button
-            key={index}
-            aria-label={index ? "Mover ponto final" : "Mover ponto inicial"}
-            data-annotation-control
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              event.currentTarget.setPointerCapture(event.pointerId);
-              startDrag(index ? "end" : "start");
-            }}
-            style={{
-              position: "absolute",
-              left: `${point.x * 100}%`,
-              top: `${point.y * 100}%`,
-              width: 18,
-              height: 18,
-              borderRadius: "50%",
-              background: "#0876db",
-              border: "3px solid white",
-              transform: "translate(-50%, -50%)",
-              zIndex: 8,
-            }}
-          />
-        ))}
     </>
   );
 }

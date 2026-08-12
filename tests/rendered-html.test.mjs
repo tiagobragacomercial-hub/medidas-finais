@@ -70,8 +70,8 @@ test("medidas e textos possuem posicionamento manual independente", async () => 
   assert.match(models, /labelPoint\?: Point/);
   assert.match(models, /descriptionPoint\?: Point/);
   assert.match(models, /interface FloorPlanText/);
-  assert.match(app, /Mover ponto inicial/);
-  assert.match(app, /Mover ponto final/);
+  assert.doesNotMatch(app, /Mover ponto inicial|Mover ponto final/);
+  assert.match(app, /startDrag\("label"\)/);
   assert.match(app, /startDrag\("description"\)/);
   assert.match(app, /Digite o texto que ficará na planta/);
   assert.match(exporter, /a\.labelPoint \|\|/);
@@ -234,8 +234,8 @@ test("foto oferece somente os símbolos técnicos da referência com legenda lat
   assert.match(app, /aria-label="Símbolo técnico"/);
   assert.match(app, /a\.type === "technical"/);
   assert.match(app, /technicalSymbolColor\(a\.technicalSymbol\)/);
-  assert.match(app, /nearestTechnicalAnchor/);
-  assert.match(app, /nearestTechnicalAnchor\?\.distance < 0\.065/);
+  assert.doesNotMatch(app, /nearestTechnicalAnchor/);
+  assert.doesNotMatch(app, /Mover ponto inicial|Mover ponto final/);
   assert.match(app, /allowMeasureThrough=\{tool === "linear"\}/);
   assert.match(app, /pointerEvents: allowMeasureThrough \? "none" : "auto"/);
   assert.match(models, /technicalSymbol\?: string/);
