@@ -312,3 +312,19 @@ test("só libera outro ambiente após concluir todas as paredes do atual", async
   assert.match(app, /selectEnvironment=\{selectEditorEnvironment\}/);
   assert.match(app, /!selectedEnvironmentComplete/);
 });
+
+test("cada parede abre uma página limpa e independente para nova foto", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /function openWallPage/);
+  assert.match(app, /setPhotoId\(""\)/);
+  assert.match(app, /setDraftPoints\(\[\]\)/);
+  assert.match(app, /setDraftPointer\(null\)/);
+  assert.match(app, /setSelected\(""\)/);
+  assert.match(app, /setPhotoDrag\(null\)/);
+  assert.match(app, /setTool\("select"\)/);
+  assert.match(app, /Página da parede/);
+  assert.match(app, /Nova página: Parede/);
+});

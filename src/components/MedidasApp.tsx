@@ -1246,6 +1246,22 @@ function Editor({
     if (!wallPhotos.some((item) => item.id === photoId))
       setPhotoId(wallPhotos[0]?.id || "");
   }, [wallPhotos, photoId]);
+  function openWallPage(nextWallIndex: number) {
+    setPhotoId("");
+    setDraftPoints([]);
+    setDraftPointer(null);
+    setSelected("");
+    setLastAction("");
+    setPhotoDrag(null);
+    setUploadAsDetail(false);
+    setTool("select");
+    setWallIndex(nextWallIndex);
+    if (file.current) file.current.value = "";
+    if (cameraFile.current) cameraFile.current.value = "";
+  }
+  useEffect(() => {
+    openWallPage(0);
+  }, [environmentId]);
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     const environment = envs.find((item) => item.id === environmentId);
@@ -1556,10 +1572,10 @@ function Editor({
           style={{ alignItems: "end", flexWrap: "wrap" }}
         >
           <label className="field" style={{ minWidth: 180 }}>
-            <span>Parede</span>
+            <span>Página da parede</span>
             <select
               value={wallIndex}
-              onChange={(event) => setWallIndex(Number(event.target.value))}
+              onChange={(event) => openWallPage(Number(event.target.value))}
             >
               {Array.from({ length: wallCount }, (_, index) => (
                 <option key={index} value={index}>
@@ -1820,12 +1836,13 @@ function Editor({
               className="btn primary"
               disabled={!photo}
               onClick={() => {
-                setWallIndex((index) => Math.min(wallCount - 1, index + 1));
-                notify(
-                  wallIndex < wallCount - 1
-                    ? `Salvo. Próxima: Parede ${wallCode(wallIndex + 1)}`
-                    : "Todas as paredes foram concluídas",
-                );
+                if (wallIndex < wallCount - 1) {
+                  const nextWallIndex = wallIndex + 1;
+                  openWallPage(nextWallIndex);
+                  notify(
+                    `Parede ${wallCode(wallIndex)} salva. Nova página: Parede ${wallCode(nextWallIndex)}`,
+                  );
+                } else notify("Todas as paredes foram concluídas");
               }}
             >
               Salvar e finalizar
