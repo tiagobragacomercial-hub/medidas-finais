@@ -1269,7 +1269,23 @@ function Editor({
     if ((e.target as HTMLElement).closest("[data-annotation-control]")) return;
     if (!isAnnotationTool(tool) || !photo) return;
     const r = canvas.current!.getBoundingClientRect(),
-      p = normalizePointer(e.clientX, e.clientY, r);
+      rawPoint = normalizePointer(e.clientX, e.clientY, r),
+      technicalAnchors = anns
+        .filter((annotation) => annotation.type === "technical")
+        .map((annotation) => annotation.labelPoint || annotation.points[0])
+        .filter((point): point is { x: number; y: number } => Boolean(point)),
+      nearestTechnicalAnchor = technicalAnchors
+        .map((point) => ({
+          point,
+          distance: Math.hypot(point.x - rawPoint.x, point.y - rawPoint.y),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0],
+      p =
+        tool === "linear" &&
+        draftPoints.length < 2 &&
+        nearestTechnicalAnchor?.distance < 0.065
+          ? nearestTechnicalAnchor.point
+          : rawPoint;
     const points = [...draftPoints, p],
       config = toolConfig[tool],
       requiredPoints = config.type === "linear" ? 3 : config.points;
@@ -1709,6 +1725,7 @@ function Editor({
                           setPhotoDrag({ annotationId: a.id, target });
                       }}
                       showHandles={tool === "select"}
+                      allowMeasureThrough={tool === "linear"}
                     />
                   ))}
               </>
@@ -2062,12 +2079,14 @@ function Measure({
   click,
   startDrag,
   showHandles,
+  allowMeasureThrough,
 }: {
   a: Annotation;
   selected: boolean;
   click: () => void;
   startDrag: (target: "start" | "end" | "label" | "description") => void;
   showHandles: boolean;
+  allowMeasureThrough: boolean;
 }) {
   const selectionTimer = useRef<number | null>(null);
   if (a.type === "technical") {
@@ -2081,10 +2100,11 @@ function Measure({
           event.currentTarget.setPointerCapture(event.pointerId);
           startDrag("label");
         }}
-        data-annotation-control
+        data-annotation-control={allowMeasureThrough ? undefined : ""}
         style={{
           left: `${(a.labelPoint?.x ?? p.x) * 100}%`,
           top: `${(a.labelPoint?.y ?? p.y) * 100}%`,
+          pointerEvents: allowMeasureThrough ? "none" : "auto",
         }}
         aria-label={a.description}
       >
@@ -2136,6 +2156,7 @@ function Measure({
             click={click}
             startDrag={startDrag}
             showHandles={showHandles}
+            allowMeasureThrough={allowMeasureThrough}
           />
         ))}
       </>

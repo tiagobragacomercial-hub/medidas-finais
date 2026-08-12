@@ -581,7 +581,7 @@ button {
 .technical-symbol-marker {
   position: absolute;
   transform: translate(-50%, -50%);
-  z-index: 8;
+  z-index: 3;
   display: grid;
   place-items: center;
   width: 38px;

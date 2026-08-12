@@ -234,10 +234,15 @@ test("foto oferece somente os símbolos técnicos da referência com legenda lat
   assert.match(app, /aria-label="Símbolo técnico"/);
   assert.match(app, /a\.type === "technical"/);
   assert.match(app, /technicalSymbolColor\(a\.technicalSymbol\)/);
+  assert.match(app, /nearestTechnicalAnchor/);
+  assert.match(app, /nearestTechnicalAnchor\?\.distance < 0\.065/);
+  assert.match(app, /allowMeasureThrough=\{tool === "linear"\}/);
+  assert.match(app, /pointerEvents: allowMeasureThrough \? "none" : "auto"/);
   assert.match(models, /technicalSymbol\?: string/);
   assert.match(exporter, /drawTechnicalSymbol/);
   assert.match(exporter, /ctx\.arc\(x, y, size \/ 2/);
   assert.match(exporter, /a\.type === "technical"/);
+  assert.match(exporter, /a\.type === "technical" \? 0 : 1/);
   assert.match(catalog, /technicalSymbolColor/);
   assert.match(catalog, /color: "#0284c7"/);
   assert.match(catalog, /color: "#dc2626"/);

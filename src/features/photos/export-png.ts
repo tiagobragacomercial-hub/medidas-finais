@@ -17,7 +17,14 @@ export async function exportAnnotatedPng(
   ctx.font = `700 ${Math.max(12, bitmap.width / 100)}px Arial`;
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
-  for (const a of annotations.filter((x) => x.state !== "hidden")) {
+  const visibleAnnotations = annotations
+    .filter((annotation) => annotation.state !== "hidden")
+    .sort(
+      (a, b) =>
+        (a.type === "technical" ? 0 : 1) -
+        (b.type === "technical" ? 0 : 1),
+    );
+  for (const a of visibleAnnotations) {
     if (a.type === "technical" && a.points[0]) {
       const point = a.labelPoint || a.points[0],
         x = point.x * bitmap.width,
