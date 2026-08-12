@@ -1999,26 +1999,6 @@ function photoDimensionGeometry(
   };
 }
 
-function photoLineStyle(
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  color: string,
-  width: number,
-): React.CSSProperties {
-  const dx = (end.x - start.x) * 100,
-    dy = (end.y - start.y) * 100;
-  return {
-    position: "absolute",
-    left: `${start.x * 100}%`,
-    top: `${start.y * 100}%`,
-    width: `${Math.hypot(dx, dy)}%`,
-    height: width,
-    background: color,
-    transform: `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`,
-    transformOrigin: "left center",
-  };
-}
-
 function EnvironmentVideo({ media }: { media: Photo }) {
   const url = useMemo(() => URL.createObjectURL(media.blob), [media.blob]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
@@ -2185,52 +2165,49 @@ function Measure({
     lineWidth = Math.min(2, a.strokeWidth || 2);
   return (
     <>
-      <div
-        aria-hidden="true"
+      <svg
+        viewBox="0 0 1000 1000"
+        preserveAspectRatio="none"
         style={{
-          ...photoLineStyle(geometry.start, geometry.lineStart, color, 1.5),
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
           pointerEvents: "none",
-          zIndex: 4,
-        }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          ...photoLineStyle(geometry.end, geometry.lineEnd, color, 1.5),
-          pointerEvents: "none",
-          zIndex: 4,
-        }}
-      />
-      <div
-        className="measure"
-        data-annotation-control={selected || undefined}
-        style={{
-          ...photoLineStyle(geometry.lineStart, geometry.lineEnd, color, lineWidth),
-          pointerEvents: "auto",
-          cursor: selected && showHandles ? "move" : "pointer",
           zIndex: 5,
         }}
-        onPointerDown={(event) => {
-          event.stopPropagation();
-          if (selected && showHandles) {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            startDrag("label");
-          } else if (event.pointerType === "mouse") click();
-          else {
-            selectionTimer.current = window.setTimeout(click, 2000);
-          }
-        }}
-        onPointerUp={() => {
-          if (selectionTimer.current)
-            window.clearTimeout(selectionTimer.current);
-          selectionTimer.current = null;
-        }}
-        onPointerCancel={() => {
-          if (selectionTimer.current)
-            window.clearTimeout(selectionTimer.current);
-          selectionTimer.current = null;
-        }}
-      />
+      >
+        <line x1={geometry.start.x * 1000} y1={geometry.start.y * 1000} x2={geometry.lineStart.x * 1000} y2={geometry.lineStart.y * 1000} stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        <line x1={geometry.end.x * 1000} y1={geometry.end.y * 1000} x2={geometry.lineEnd.x * 1000} y2={geometry.lineEnd.y * 1000} stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        <line x1={geometry.lineStart.x * 1000} y1={geometry.lineStart.y * 1000} x2={geometry.lineEnd.x * 1000} y2={geometry.lineEnd.y * 1000} stroke={color} strokeWidth={lineWidth} vectorEffect="non-scaling-stroke" />
+        <line
+          data-annotation-control={selected || undefined}
+          x1={geometry.lineStart.x * 1000}
+          y1={geometry.lineStart.y * 1000}
+          x2={geometry.lineEnd.x * 1000}
+          y2={geometry.lineEnd.y * 1000}
+          stroke="transparent"
+          strokeWidth="18"
+          vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: "stroke", cursor: selected && showHandles ? "move" : "pointer" }}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            if (selected && showHandles) {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              startDrag("label");
+            } else if (event.pointerType === "mouse") click();
+            else selectionTimer.current = window.setTimeout(click, 2000);
+          }}
+          onPointerUp={() => {
+            if (selectionTimer.current) window.clearTimeout(selectionTimer.current);
+            selectionTimer.current = null;
+          }}
+          onPointerCancel={() => {
+            if (selectionTimer.current) window.clearTimeout(selectionTimer.current);
+            selectionTimer.current = null;
+          }}
+        />
+      </svg>
       <button
         className="point-marker text"
         data-annotation-control
