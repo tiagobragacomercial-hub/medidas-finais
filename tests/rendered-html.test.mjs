@@ -62,7 +62,7 @@ test("navegação e seleção operacional possuem ações reais", async () => {
   assert.match(app, /onClick=\{\(\) => setSection\("portal"\)\}/);
   assert.match(app, /onClick=\{\(\) => setSection\("settings"\)\}/);
   assert.match(app, /onClick=\{\(\) => open\(p\.id\)\}/);
-  assert.match(app, /selectEnvironment=\{setSelectedEnvironmentId\}/);
+  assert.match(app, /selectEnvironment=\{selectEditorEnvironment\}/);
   assert.match(app, /selectProject=\{setSelectedProjectId\}/);
   assert.doesNotMatch(app, /function FloorPlanLegacy/);
 });
@@ -297,4 +297,18 @@ test("planta salva permanece anexada ao ambiente e reabre para ediÃ§Ã£o", as
   assert.match(app, /await savePlan\(true\)/);
   assert.match(app, /environmentId: environment\.id/);
   assert.match(app, /if \(\s*!existing &&\s*!strokes\.length/);
+});
+
+test("só libera outro ambiente após concluir todas as paredes do atual", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /selectedEnvironmentComplete/);
+  assert.match(app, /completedWallCodes/);
+  assert.match(app, /selectedEnvironmentPlan\?\.confirmed/);
+  assert.match(app, /\.every\(\(code\) => completedWallCodes\.has\(code\)\)/);
+  assert.match(app, /Conclua todas as paredes deste ambiente antes de continuar/);
+  assert.match(app, /selectEnvironment=\{selectEditorEnvironment\}/);
+  assert.match(app, /!selectedEnvironmentComplete/);
 });

@@ -127,8 +127,52 @@ export function MedidasApp() {
         : Promise.resolve(undefined),
     [selectedEnvironmentId],
   );
+  const selectedEnvironmentWallCount = Math.max(
+      1,
+      (selectedEnvironmentPlan?.strokes || []).reduce(
+        (total, stroke, index) =>
+          total +
+          (selectedEnvironmentPlan?.strokeKinds?.[index] === "curve"
+            ? stroke.length > 1
+              ? 1
+              : 0
+            : Math.max(0, stroke.length - 1)),
+        0,
+      ),
+    ),
+    selectedEnvironmentPhotos = photos.filter(
+      (photo) =>
+        photo.environmentId === selectedEnvironmentId &&
+        (!photo.mediaType || photo.mediaType === "image") &&
+        !photo.detailOfPhotoId,
+    ),
+    completedWallCodes = new Set(
+      selectedEnvironmentPhotos.map((photo) => photo.wallCode || "A"),
+    ),
+    selectedEnvironmentComplete =
+      Boolean(selectedEnvironmentPlan?.confirmed) &&
+      Array.from({ length: selectedEnvironmentWallCount }, (_, index) =>
+        wallCode(index),
+      ).every((code) => completedWallCodes.has(code));
+  const selectEditorEnvironment = (nextEnvironmentId: string) => {
+    if (
+      selectedEnvironmentId &&
+      nextEnvironmentId !== selectedEnvironmentId &&
+      !selectedEnvironmentComplete
+    ) {
+      setToast("Conclua todas as paredes deste ambiente antes de continuar");
+      setTimeout(() => setToast(""), 2600);
+      return;
+    }
+    setSelectedEnvironmentId(nextEnvironmentId);
+  };
   const goToNextEnvironment = () => {
     if (!selectedProjectEnvironments.length) return;
+    if (!selectedEnvironmentComplete) {
+      setToast("Conclua todas as paredes deste ambiente antes de continuar");
+      setTimeout(() => setToast(""), 2600);
+      return;
+    }
     const currentIndex = selectedProjectEnvironments.findIndex(
       (item) => item.id === selectedEnvironmentId,
     );
@@ -314,7 +358,10 @@ export function MedidasApp() {
                   </button>
                   <button
                     className="btn next-step"
-                    disabled={selectedProjectEnvironments.length < 2}
+                    disabled={
+                      selectedProjectEnvironments.length < 2 ||
+                      !selectedEnvironmentComplete
+                    }
                     onClick={goToNextEnvironment}
                   >
                     Próximo ambiente →
@@ -358,7 +405,7 @@ export function MedidasApp() {
               envs={selectedProjectEnvironments}
               photos={photos}
               environmentId={selectedEnvironmentId}
-              selectEnvironment={setSelectedEnvironmentId}
+              selectEnvironment={selectEditorEnvironment}
               notify={setToast}
             />
           )}{" "}
@@ -366,7 +413,7 @@ export function MedidasApp() {
             <FloorPlan
               envs={selectedProjectEnvironments}
               environmentId={selectedEnvironmentId}
-              selectEnvironment={setSelectedEnvironmentId}
+              selectEnvironment={selectEditorEnvironment}
               onConfirmed={() => setSection("editor")}
             />
           )}{" "}
