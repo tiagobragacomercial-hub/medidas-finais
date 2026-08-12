@@ -1783,7 +1783,11 @@ function Editor({
             >
               {a.type === "technical" ? (
                 <strong style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <TechnicalSymbolIcon symbol={a.technicalSymbol} size={24} />
+                  <TechnicalSymbolIcon
+                    symbol={a.technicalSymbol}
+                    size={24}
+                    color={technicalSymbolColor(a.technicalSymbol)}
+                  />
                   {a.description}
                 </strong>
               ) : (
@@ -2026,8 +2030,8 @@ function EnvironmentVideo({ media }: { media: Photo }) {
   );
 }
 
-function TechnicalSymbolIcon({ symbol, size = 28 }: { symbol?: string; size?: number }) {
-  const red = "#ef3340", blue = "#1769d2", green = "#18a83b";
+function TechnicalSymbolIcon({ symbol, size = 28, color }: { symbol?: string; size?: number; color?: string }) {
+  const red = color || "#ef3340", blue = color || "#1769d2", green = color || "#18a83b";
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
       {symbol === "outlet-low" && <path d="M7 5 25 16 7 27Z" fill="white" stroke={red} strokeWidth="2" />}
@@ -2081,12 +2085,14 @@ function Measure({
         style={{
           left: `${(a.labelPoint?.x ?? p.x) * 100}%`,
           top: `${(a.labelPoint?.y ?? p.y) * 100}%`,
-          borderColor: technicalSymbolColor(a.technicalSymbol),
-          boxShadow: `0 0 0 2px #fff, 0 2px 7px ${technicalSymbolColor(a.technicalSymbol)}55`,
         }}
         aria-label={a.description}
       >
-        <TechnicalSymbolIcon symbol={a.technicalSymbol} size={22} />
+        <TechnicalSymbolIcon
+          symbol={a.technicalSymbol}
+          size={25}
+          color={technicalSymbolColor(a.technicalSymbol)}
+        />
       </button>
     );
   }
@@ -2221,8 +2227,9 @@ function Measure({
           fontSize: 12,
           color,
           background: "#fff",
+          border: "none",
           zIndex: 10,
-          boxShadow: "0 0 0 3px #fff",
+          boxShadow: "none",
         }}
       >
         {a.value || "?"}

@@ -25,12 +25,9 @@ export async function exportAnnotatedPng(
         size = Math.max(30, bitmap.width / 28);
       ctx.save();
       ctx.fillStyle = "#fff";
-      ctx.strokeStyle = technicalSymbolColor(a.technicalSymbol);
-      ctx.lineWidth = Math.max(3, bitmap.width / 500);
       ctx.beginPath();
       ctx.arc(x, y, size / 2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
       ctx.restore();
       drawTechnicalSymbol(
         ctx,
@@ -38,6 +35,7 @@ export async function exportAnnotatedPng(
         x,
         y,
         size * 0.62,
+        technicalSymbolColor(a.technicalSymbol),
       );
       continue;
     }
@@ -113,8 +111,9 @@ function drawTechnicalSymbol(
   x: number,
   y: number,
   size: number,
+  color?: string,
 ) {
-  const red = "#ef3340", blue = "#1769d2", green = "#18a83b", half = size / 2;
+  const red = color || "#ef3340", blue = color || "#1769d2", green = color || "#18a83b", half = size / 2;
   ctx.save();
   ctx.translate(x - half, y - half);
   ctx.scale(size / 32, size / 32);
