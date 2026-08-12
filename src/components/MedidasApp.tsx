@@ -1630,7 +1630,19 @@ function Editor({
             onPointerUp={finishPhotoDrag}
             onPointerCancel={finishPhotoDrag}
             style={
-              photo ? { aspectRatio: `${photo.width}/${photo.height}` } : {}
+              photo
+                ? photo.width <= photo.height
+                  ? {
+                      width: "auto",
+                      height: "88%",
+                      aspectRatio: `${photo.width}/${photo.height}`,
+                    }
+                  : {
+                      width: "92%",
+                      height: "auto",
+                      aspectRatio: `${photo.width}/${photo.height}`,
+                    }
+                : {}
             }
           >
             {photo ? (
