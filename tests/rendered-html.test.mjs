@@ -35,6 +35,7 @@ test("coordenadas de marcações são proporcionais", async () => {
   assert.match(geometry, /clientX\s*-\s*rect\.left/);
   assert.match(geometry, /point\.x\s*\*\s*width/);
   assert.match(app, /start\.x\s*\*\s*100/);
+  assert.match(app, /p = normalizePointer\(e\.clientX, e\.clientY, r\)/);
 });
 
 test("exportação usa a foto original e omite elementos ocultos", async () => {

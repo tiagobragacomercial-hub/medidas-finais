@@ -451,6 +451,7 @@ button {
   box-shadow: 0 4px 24px #26394c2b;
 }
 .canvas img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -473,15 +474,7 @@ button {
 }
 .measure:before,
 .measure:after {
-  content: "";
-  position: absolute;
-  top: -5px;
-  width: 3px;
-  height: 13px;
-  background: #f04444;
-}
-.measure:after {
-  right: 0;
+  content: none;
 }
 .measure span {
   position: absolute;
