@@ -1272,14 +1272,10 @@ function Editor({
       p = normalizePointer(e.clientX, e.clientY, r);
     const points = [...draftPoints, p],
       config = toolConfig[tool],
-      requiredPoints = config.type === "linear" ? 3 : config.points;
+      requiredPoints = config.points;
     if (points.length < requiredPoints) {
       setDraftPoints(points);
-      notify(
-        config.type === "linear" && points.length === 2
-          ? "Agora posicione a linha da medida"
-          : `Ponto ${points.length} registrado`,
-      );
+      notify(`Ponto ${points.length} registrado`);
       return;
     }
     let value = "",
@@ -1320,7 +1316,13 @@ function Editor({
       code: nextCode(tool, anns),
       state: "protected",
       points: finalPoints,
-      labelPoint: config.type === "linear" ? points[2] : undefined,
+      labelPoint:
+        config.type === "linear"
+          ? {
+              x: (points[0].x + points[1].x) / 2,
+              y: (points[0].y + points[1].y) / 2,
+            }
+          : undefined,
       value,
       textPosition: "above",
       description,

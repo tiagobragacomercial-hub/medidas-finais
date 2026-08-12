@@ -203,9 +203,9 @@ test("medida da foto usa dois pontos e posicionamento da cota como a planta", as
     new URL("../src/components/MedidasApp.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(app, /requiredPoints = config\.type === "linear" \? 3/);
-  assert.match(app, /Agora posicione a linha da medida/);
-  assert.match(app, /labelPoint: config\.type === "linear" \? points\[2\]/);
+  assert.match(app, /requiredPoints = config\.points/);
+  assert.doesNotMatch(app, /Agora posicione a linha da medida/);
+  assert.match(app, /x: \(points\[0\]\.x \+ points\[1\]\.x\) \/ 2/);
   assert.match(app, /function photoDimensionGeometry/);
   assert.match(app, /geometry\.lineStart/);
   assert.match(app, /geometry\.lineEnd/);
