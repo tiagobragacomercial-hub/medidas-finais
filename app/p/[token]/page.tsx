@@ -10,7 +10,13 @@ type Snapshot = {
   project?: { name?: string; address?: string; version?: number };
   client?: { name?: string };
   environments?: Array<{ id: string; name: string; type: string }>;
-  photos?: Array<{ id: string; environmentId: string; name: string }>;
+  photos?: Array<{
+    id: string;
+    environmentId: string;
+    name: string;
+    mediaType?: "image" | "video";
+    mimeType?: string;
+  }>;
 };
 
 export default async function ClientPortal({
@@ -82,26 +88,60 @@ export default async function ClientPortal({
             Baixar PDF técnico
           </a>
         </div>
-        {(snapshot.environments || []).map((environment) => (
-          <div className="row" key={environment.id}>
-            <div className="avatar">
-              {environment.name.slice(0, 2).toUpperCase()}
+        {(snapshot.environments || []).map((environment) => {
+          const environmentMedia = (snapshot.photos || []).filter(
+              (photo) => photo.environmentId === environment.id,
+            ),
+            photos = environmentMedia.filter(
+              (photo) => photo.mediaType !== "video",
+            ),
+            videos = environmentMedia.filter(
+              (photo) => photo.mediaType === "video",
+            );
+          return (
+            <div className="card" key={environment.id} style={{ marginTop: 14 }}>
+              <div className="row">
+                <div className="avatar">
+                  {environment.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="rowmain">
+                  <strong>{environment.name}</strong>
+                  <small>
+                    {environment.type} · {photos.length} foto(s) · {videos.length}{" "}
+                    vídeo(s)
+                  </small>
+                </div>
+                <span className="pill ok">Visualização</span>
+              </div>
+              {videos.map((video) => (
+                <div key={video.id} style={{ marginTop: 14 }}>
+                  <strong>Vídeo do ambiente</strong>
+                  <video
+                    controls
+                    preload="metadata"
+                    playsInline
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      maxHeight: 520,
+                      marginTop: 8,
+                      borderRadius: 12,
+                      background: "#101820",
+                    }}
+                    src={`/api/portal/media?access=${encodeURIComponent(downloadKey)}&media=${encodeURIComponent(video.id)}`}
+                  >
+                    Seu navegador não consegue reproduzir este vídeo.
+                  </video>
+                </div>
+              ))}
+              {!videos.length && (
+                <p className="subtitle" style={{ marginTop: 12 }}>
+                  Nenhum vídeo foi publicado para este ambiente.
+                </p>
+              )}
             </div>
-            <div className="rowmain">
-              <strong>{environment.name}</strong>
-              <small>
-                {environment.type} ·{" "}
-                {
-                  (snapshot.photos || []).filter(
-                    (photo) => photo.environmentId === environment.id,
-                  ).length
-                }{" "}
-                foto(s)
-              </small>
-            </div>
-            <span className="pill ok">Visualização</span>
-          </div>
-        ))}
+          );
+        })}
       </section>
     </main>
   );

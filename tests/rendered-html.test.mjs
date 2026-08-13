@@ -166,6 +166,19 @@ test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () 
   assert.match(app, /<video/);
 });
 
+test("portal protegido mostra os vídeos fixados em cada ambiente", async () => {
+  const [portal, mediaRoute] = await Promise.all([
+    readFile(new URL("../app/p/[token]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/portal/media/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(portal, /Vídeo do ambiente/);
+  assert.match(portal, /\/api\/portal\/media\?access=/);
+  assert.match(portal, /photo\.environmentId === environment\.id/);
+  assert.match(mediaRoute, /item\.mediaType === "video"/);
+  assert.match(mediaRoute, /portal_access/);
+  assert.match(mediaRoute, /MEDIA\.get\(`photos\/\$\{media\.id\}`\)/);
+});
+
 test("editor permite fotografar diretamente com a câmera traseira", async () => {
   const app = await readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8");
   assert.match(app, /capture="environment"/);
