@@ -319,6 +319,9 @@ test("cada parede abre uma página limpa e independente para nova foto", async (
     "utf8",
   );
   assert.match(app, /function openWallPage/);
+  assert.match(app, /async function persistCurrentWall/);
+  assert.match(app, /await syncPending\(httpSyncTransport\)/);
+  assert.match(app, /await persistCurrentWall\(\)/);
   assert.match(app, /setPhotoId\(""\)/);
   assert.match(app, /setDraftPoints\(\[\]\)/);
   assert.match(app, /setDraftPointer\(null\)/);

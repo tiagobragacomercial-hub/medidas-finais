@@ -1259,6 +1259,19 @@ function Editor({
     if (file.current) file.current.value = "";
     if (cameraFile.current) cameraFile.current.value = "";
   }
+  async function persistCurrentWall() {
+    const result = await syncPending(httpSyncTransport);
+    if (result.failed > 0)
+      notify(
+        "Parede salva neste dispositivo. A sincronização com a nuvem será retomada automaticamente.",
+      );
+    else
+      notify(
+        result.sent > 0
+          ? "Parede salva neste dispositivo e sincronizada com a nuvem"
+          : "Parede salva neste dispositivo",
+      );
+  }
   useEffect(() => {
     openWallPage(0);
   }, [environmentId]);
@@ -1825,9 +1838,9 @@ function Editor({
             <button
               className="btn"
               disabled={!photo}
-              onClick={() => {
+              onClick={async () => {
                 if (photo?.detailOfPhotoId) setPhotoId(photo.detailOfPhotoId);
-                notify("Imagem e medidas salvas");
+                await persistCurrentWall();
               }}
             >
               Salvar
@@ -1835,7 +1848,8 @@ function Editor({
             <button
               className="btn primary"
               disabled={!photo}
-              onClick={() => {
+              onClick={async () => {
+                await persistCurrentWall();
                 if (wallIndex < wallCount - 1) {
                   const nextWallIndex = wallIndex + 1;
                   openWallPage(nextWallIndex);
