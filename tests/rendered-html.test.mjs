@@ -369,4 +369,7 @@ test("última parede avança para outro ambiente ou para a publicação", async 
   assert.match(app, /missingWallIndex/);
   assert.match(app, /finishEnvironment\(\)/);
   assert.match(app, /Voltar e editar informações/);
+  assert.match(app, /allWallsComplete/);
+  assert.match(app, /Todas as paredes possuem fotografia/);
+  assert.match(app, /\.sort\(\(a, b\) => \(a\.order \|\| 0\) - \(b\.order \|\| 0\)\)/);
 });

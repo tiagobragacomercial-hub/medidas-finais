@@ -28,6 +28,7 @@ export interface Environment {
   projectId: string;
   name: string;
   type: string;
+  order?: number;
   status: "active" | "archived";
 }
 export interface Photo {

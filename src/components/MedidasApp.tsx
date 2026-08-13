@@ -108,7 +108,7 @@ export function MedidasApp() {
   const selectedProjectEnvironments = selectedProjectId
       ? envs.filter(
           (environment) => environment.projectId === selectedProjectId,
-        )
+        ).sort((a, b) => (a.order || 0) - (b.order || 0))
       : envs,
     firstProjectId = projects[0]?.id;
   const selectedProject = projects.find(
@@ -890,6 +890,7 @@ function Modal({
               projectId,
               name: envType,
               type: envType,
+              order: index + 1,
               status: "active",
             });
             await queue("environment", envId, "create");
@@ -938,6 +939,7 @@ function Modal({
             projectId: id,
             name: String(f.get("envType")),
             type: String(f.get("envType")),
+            order: 1,
             status: "active",
           });
           await queue("project", id, "create");
@@ -1220,7 +1222,11 @@ function Editor({
     environmentPhotos
       .filter((item) => !item.detailOfPhotoId)
       .map((item) => item.wallCode || "A"),
-  );
+    ),
+    allWallsComplete = Array.from(
+      { length: wallCount },
+      (_, index) => wallCode(index),
+    ).every((code) => completedWallCodes.has(code));
   const file = useRef<HTMLInputElement>(null),
     cameraFile = useRef<HTMLInputElement>(null),
     canvas = useRef<HTMLDivElement>(null);
@@ -1669,6 +1675,27 @@ function Editor({
             {environmentVideos.map((video) => (
               <EnvironmentVideo key={video.id} media={video} />
             ))}
+          </div>
+        </section>
+      )}
+      {allWallsComplete && (
+        <section className="card" style={{ marginBottom: 14 }}>
+          <div className="cardhead">
+            <div>
+              <h2>Ambiente completo</h2>
+              <p className="subtitle">
+                Todas as paredes possuem fotografia. Você ainda pode voltar e editar qualquer informação.
+              </p>
+            </div>
+            <button
+              className="btn primary"
+              onClick={async () => {
+                await persistCurrentWall();
+                finishEnvironment();
+              }}
+            >
+              Finalizar ambiente e prosseguir
+            </button>
           </div>
         </section>
       )}
