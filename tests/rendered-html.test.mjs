@@ -106,6 +106,16 @@ test("editor de medidas remove a ferramenta em L e oferece desfazer", async () =
   assert.match(app, /Desfazer última ação/);
 });
 
+test("editor de fotos não oferece medida de ângulo", async () => {
+  const [app, catalog] = await Promise.all([
+    readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/annotations/catalog.ts", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(app, /∠ Ângulo/);
+  assert.doesNotMatch(app, /Informe o ângulo confirmado/);
+  assert.doesNotMatch(catalog, /^\s*angle:/m);
+});
+
 test("planta aceita paredes sequenciais e componentes de porta e janela", async () => {
   const [app, models] = await Promise.all([
     readFile(new URL("../src/components/MedidasApp.tsx", import.meta.url), "utf8"),

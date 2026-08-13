@@ -1366,13 +1366,7 @@ function Editor({
         technicalSymbols.find((item) => item.id === technicalSymbol)?.label ||
         technicalSymbols[0].label;
     } else {
-      value =
-        prompt(
-          tool === "angle"
-            ? "Informe o ângulo confirmado:"
-            : "Informe a medida (somente número):",
-          "",
-        ) ?? "";
+      value = prompt("Informe a medida (somente número):", "") ?? "";
       const parsed = measurementValueSchema.safeParse(value.trim());
       if (!parsed.success) {
         notify("Informe somente o número da medida");
@@ -1666,7 +1660,6 @@ function Editor({
           </button>
           {[
             ["select", "↖ Selecionar"],
-            ["angle", "∠ Ângulo"],
             ["point", "⊙ Símbolos técnicos"],
             ["text", "T Texto"],
             ["detail", "◉ Foto detalhe"],
