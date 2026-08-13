@@ -1193,7 +1193,7 @@ function Editor({
   );
   const currentWallCode = wallCode(wallIndex);
   const wallPhotos = environmentPhotos.filter(
-    (item) => !item.wallCode || item.wallCode === currentWallCode,
+    (item) => (item.wallCode || "A") === currentWallCode,
   );
   const file = useRef<HTMLInputElement>(null),
     cameraFile = useRef<HTMLInputElement>(null),

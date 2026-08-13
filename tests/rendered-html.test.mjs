@@ -327,4 +327,6 @@ test("cada parede abre uma página limpa e independente para nova foto", async (
   assert.match(app, /setTool\("select"\)/);
   assert.match(app, /Página da parede/);
   assert.match(app, /Nova página: Parede/);
+  assert.match(app, /\(item\.wallCode \|\| "A"\) === currentWallCode/);
+  assert.doesNotMatch(app, /!item\.wallCode \|\| item\.wallCode === currentWallCode/);
 });
