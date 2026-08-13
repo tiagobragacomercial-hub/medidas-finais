@@ -161,7 +161,7 @@ test("estilo escolhido passa a valer para todas as medidas das fotos", async () 
   assert.match(app, /Linha de todas/);
   assert.match(app, /Letra de todas/);
   assert.match(app, /window\.setTimeout\(click, 2000\)/);
-  assert.match(app, /Salvar e finalizar/);
+  assert.match(app, /Finalizar ambiente e prosseguir/);
 });
 
 test("ambiente aceita vídeo sem tratá-lo como fotografia editável", async () => {
@@ -355,4 +355,18 @@ test("cada parede abre uma página limpa e independente para nova foto", async (
   assert.match(app, /Nova página: Parede/);
   assert.match(app, /\(item\.wallCode \|\| "A"\) === currentWallCode/);
   assert.doesNotMatch(app, /!item\.wallCode \|\| item\.wallCode === currentWallCode/);
+});
+
+test("última parede avança para outro ambiente ou para a publicação", async () => {
+  const app = await readFile(
+    new URL("../src/components/MedidasApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /const finishCurrentEnvironment = \(\) =>/);
+  assert.match(app, /const nextEnvironment = selectedProjectEnvironments\[currentIndex \+ 1\]/);
+  assert.match(app, /setSection\("portal"\)/);
+  assert.match(app, /Finalizar ambiente e prosseguir/);
+  assert.match(app, /missingWallIndex/);
+  assert.match(app, /finishEnvironment\(\)/);
+  assert.match(app, /Voltar e editar informações/);
 });

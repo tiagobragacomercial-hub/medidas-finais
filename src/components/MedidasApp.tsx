@@ -185,6 +185,23 @@ export function MedidasApp() {
     setToast(`Ambiente atual: ${next.name}`);
     setTimeout(() => setToast(""), 2200);
   };
+  const finishCurrentEnvironment = () => {
+    const currentIndex = selectedProjectEnvironments.findIndex(
+      (item) => item.id === selectedEnvironmentId,
+    );
+    const nextEnvironment = selectedProjectEnvironments[currentIndex + 1];
+    if (nextEnvironment) {
+      setSelectedEnvironmentId(nextEnvironment.id);
+      setSection("floorplan");
+      setToast(
+        `${selectedEnvironment?.name || "Ambiente"} concluído. Próximo ambiente: ${nextEnvironment.name}`,
+      );
+    } else {
+      setSection("portal");
+      setToast("Levantamento concluído. Gere agora o PDF, o código e o QR Code.");
+    }
+    setTimeout(() => setToast(""), 3200);
+  };
   useEffect(() => {
     if (!selectedProjectId && firstProjectId)
       setSelectedProjectId(firstProjectId);
@@ -406,6 +423,7 @@ export function MedidasApp() {
               photos={photos}
               environmentId={selectedEnvironmentId}
               selectEnvironment={selectEditorEnvironment}
+              finishEnvironment={finishCurrentEnvironment}
               notify={setToast}
             />
           )}{" "}
@@ -426,6 +444,7 @@ export function MedidasApp() {
               projects={projects}
               projectId={selectedProjectId}
               selectProject={setSelectedProjectId}
+              editProject={() => setSection("editor")}
             />
           )}
           {section === "settings" && <SettingsPanel />}
@@ -1125,12 +1144,14 @@ function Editor({
   photos,
   environmentId,
   selectEnvironment,
+  finishEnvironment,
   notify,
 }: {
   envs: Environment[];
   photos: Photo[];
   environmentId: string;
   selectEnvironment: (environmentId: string) => void;
+  finishEnvironment: () => void;
   notify: (s: string) => void;
 }) {
   const environmentMedia = photos.filter(
@@ -1194,6 +1215,11 @@ function Editor({
   const currentWallCode = wallCode(wallIndex);
   const wallPhotos = environmentPhotos.filter(
     (item) => (item.wallCode || "A") === currentWallCode,
+  );
+  const completedWallCodes = new Set(
+    environmentPhotos
+      .filter((item) => !item.detailOfPhotoId)
+      .map((item) => item.wallCode || "A"),
   );
   const file = useRef<HTMLInputElement>(null),
     cameraFile = useRef<HTMLInputElement>(null),
@@ -1849,10 +1875,25 @@ function Editor({
                   notify(
                     `Parede ${wallCode(wallIndex)} salva. Nova página: Parede ${wallCode(nextWallIndex)}`,
                   );
-                } else notify("Todas as paredes foram concluídas");
+                } else {
+                  const missingWallIndex = Array.from(
+                    { length: wallCount },
+                    (_, index) => index,
+                  ).find((index) => !completedWallCodes.has(wallCode(index)));
+                  if (missingWallIndex !== undefined) {
+                    openWallPage(missingWallIndex);
+                    notify(
+                      `Adicione a foto da Parede ${wallCode(missingWallIndex)} antes de finalizar o ambiente`,
+                    );
+                    return;
+                  }
+                  finishEnvironment();
+                }
               }}
             >
-              Salvar e finalizar
+              {wallIndex < wallCount - 1
+                ? "Salvar e ir para próxima parede"
+                : "Finalizar ambiente e prosseguir"}
             </button>
           </div>
         </div>
@@ -4299,10 +4340,12 @@ function Portal({
   projects,
   projectId,
   selectProject,
+  editProject,
 }: {
   projects: Project[];
   projectId: string;
   selectProject: (projectId: string) => void;
+  editProject: () => void;
 }) {
   const [qr, setQr] = useState(""),
     [access, setAccess] = useState<{ url: string; code: string } | null>(null),
@@ -4384,24 +4427,29 @@ function Portal({
         sub="Somente a versão publicada pode ser visualizada ou baixada."
       />
       <section className="card" style={{ marginBottom: 14 }}>
-        <label className="field" style={{ maxWidth: 520 }}>
-          <span>Projeto para publicação</span>
-          <select
-            value={projectId}
-            onChange={(event) => {
-              selectProject(event.target.value);
-              setAccess(null);
-              setQr("");
-            }}
-          >
-            <option value="">Selecione um projeto</option>
-            {projects.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="actions" style={{ alignItems: "end", flexWrap: "wrap" }}>
+          <label className="field" style={{ minWidth: 280, maxWidth: 520 }}>
+            <span>Projeto para publicação</span>
+            <select
+              value={projectId}
+              onChange={(event) => {
+                selectProject(event.target.value);
+                setAccess(null);
+                setQr("");
+              }}
+            >
+              <option value="">Selecione um projeto</option>
+              {projects.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="btn" disabled={!project} onClick={editProject}>
+            Voltar e editar informações
+          </button>
+        </div>
       </section>
       <section className="portal-cover">
         <div className="eyebrow" style={{ color: "#8ecbff" }}>
